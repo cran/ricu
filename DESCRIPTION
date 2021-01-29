@@ -6,7 +6,7 @@ Description: Focused on (but not exclusive to) data sets hosted on PhysioNet
     functions for running arbitrary queries against available data sets, a
     system for defining clinical concepts and encoding their representations
     in tabular ICU data is presented.
-Version: 0.1.2
+Version: 0.1.3
 Authors@R: c(
     person(given = "Nicolas",
            family = "Bennett",
@@ -33,14 +33,14 @@ Imports: data.table, curl, assertthat, fst, readr, jsonlite, methods,
         glue, fansi, utils
 Suggests: openssl, xml2, covr, testthat (>= 2.1.0), withr, pkgload,
         mimic.demo, eicu.demo, progress, knitr, rmarkdown, ggplot2
-RoxygenNote: 7.1.1.9000
+RoxygenNote: 7.1.1
 Additional_repositories: https://septic-tank.github.io/physionet-demo
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2020-10-25 11:03:44 UTC; nbennett
+Packaged: 2021-01-29 17:06:03 UTC; nbennett
 Author: Nicolas Bennett [aut, cre],
   Drago Plecko [aut],
   Ida-Fong Ukor [aut]
 Maintainer: Nicolas Bennett <nicolas.bennett@stat.math.ethz.ch>
 Repository: CRAN
-Date/Publication: 2020-11-03 11:50:06 UTC
+Date/Publication: 2021-01-29 23:40:02 UTC
