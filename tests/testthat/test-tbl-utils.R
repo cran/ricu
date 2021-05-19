@@ -30,11 +30,11 @@ test_that("rm_cols for id_tbl", {
   expect_identical(colnames(rm_cols(tbl, "c")), c("a", "b"))
   expect_identical(colnames(tbl), c("a", "b", "c"))
 
-  expect_is(rm_cols(tbl, "c"), "id_tbl")
+  expect_s3_class(rm_cols(tbl, "c"), "id_tbl")
   expect_identical(colnames(rm_cols(tbl, "a")), c("b", "c"))
-  expect_is(rm_cols(tbl, "a"), "data.table")
+  expect_s3_class(rm_cols(tbl, "a"), "data.table")
   expect_identical(colnames(rm_cols(tbl, c("a", "b"))), "c")
-  expect_is(rm_cols(tbl, c("a", "b")), "data.table")
+  expect_s3_class(rm_cols(tbl, c("a", "b")), "data.table")
 
   expect_error(rm_cols(tbl, "d"), class = "has_cols_assert")
 
@@ -74,11 +74,11 @@ test_that("rm_cols for ts_tbl", {
   tbl <- ts_tbl(a = 1:10, b = hours(1:10), c = rnorm(10))
 
   expect_identical(colnames(rm_cols(tbl, "c")), c("a", "b"))
-  expect_is(rm_cols(tbl, "c"), "ts_tbl")
+  expect_s3_class(rm_cols(tbl, "c"), "ts_tbl")
   expect_identical(colnames(rm_cols(tbl, "a")), c("b", "c"))
-  expect_is(rm_cols(tbl, "a"), "data.table")
+  expect_s3_class(rm_cols(tbl, "a"), "data.table")
   expect_identical(colnames(rm_cols(tbl, c("a", "b"))), "c")
-  expect_is(rm_cols(tbl, "a"), "data.table")
+  expect_s3_class(rm_cols(tbl, "a"), "data.table")
 
   expect_error(rm_cols(tbl, "d"), class = "has_cols_assert")
 
@@ -103,7 +103,7 @@ test_that("icu_tbl rbinding", {
 
   res <- rbind_lst(list(x, y, z))
 
-  expect_is(res, "ts_tbl")
+  expect_s3_class(res, "ts_tbl")
   expect_identical(id_vars(res), "a")
   expect_identical(index_var(res), "b")
   expect_setequal(data_vars(res), "c")
@@ -122,7 +122,7 @@ test_that("icu_tbl rbinding", {
   y2 <- id_tbl(a = 1:10, c = dat2)
   res2 <- rbind_lst(list(x, y2, z), fill = TRUE)
 
-  expect_is(res2, "id_tbl")
+  expect_s3_class(res2, "id_tbl")
   expect_identical(id_vars(res2), "a")
   expect_setequal(data_vars(res2), c("b", "c"))
   expect_identical(nrow(res2), 30L)
@@ -140,16 +140,39 @@ test_that("unique", {
 
   res <- aggregate(tbl, NULL)
 
-  expect_is(res, "ts_tbl")
+  expect_s3_class(res, "ts_tbl")
   expect_true(is_unique(res))
 
   res <- aggregate(tbl, "sum")
 
-  expect_is(res, "ts_tbl")
+  expect_s3_class(res, "ts_tbl")
   expect_true(is_unique(res))
 
   expect_identical(res, aggregate(tbl, sum))
   expect_identical(res, aggregate(tbl, fun))
   expect_identical(res, aggregate(tbl, list(z = sum(z))))
   expect_identical(res, aggregate(tbl, list(z = fun(z))))
+})
+
+test_that("na ops", {
+
+  tbl <- id_tbl(
+    a = seq.int(10L),
+    b = sample(c(TRUE, FALSE, NA), 10L, TRUE),
+    c = sample(c(letters[seq.int(6L)], rep(NA_character_, 4L))),
+    d = c(rnorm(1L), sample(c(rnorm(5L), rep(NA_real_, 4L))))
+  )
+
+  no_na <- replace_na(tbl, list(TRUE, "z", NULL), c("const", "const", "locf"),
+                      vars = c("b", "c", "d"))
+
+  expect_identical(nrow(rm_na(no_na, character(0L))),
+                   nrow(rm_na(no_na, mode = "any")))
+
+  tmp <- no_na
+
+  val <- tmp[["d"]][5L]
+  tmp[["d"]][5L] <- NA_real_
+
+  expect_equal(replace_na(tmp, val), no_na, ignore_attr = TRUE)
 })
