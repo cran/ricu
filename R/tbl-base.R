@@ -61,17 +61,22 @@ format.id_tbl <- function(x, ..., n = NULL, width = NULL, n_extra = NULL) {
 
 #' @importFrom tibble tbl_sum
 #' @export
+tbl_sum.win_tbl <- function(x) {
+  c(NextMethod(), `Duration var` = quote_bt(dur_var(x)))
+}
+
+#' @export
 tbl_sum.ts_tbl <- function(x) {
   idx <- paste0(quote_bt(index_var(x)), " (", format(interval(x)), ")")
   c(NextMethod(), `Index var` = idx)
 }
 
-#' @importFrom tibble tbl_sum
 #' @export
 tbl_sum.id_tbl <- function(x) {
 
   get_unit <- function(x) {
     if (inherits(x, "difftime")) ""
+    else if (inherits(x, "units")) units::deparse_unit(x)
     else if (has_attr(x, "units")) attr(x, "units")
     else ""
   }
@@ -115,10 +120,9 @@ str.id_tbl <- function(object, ...) invisible(prt::str_dt(object, ...))
 #'
 #' @rdname tbl_reshape
 #' @keywords internal
-#'
 #' @export
-.cbind.id_tbl <- function(..., keep.rownames = FALSE, check.names = FALSE,
-                          key = NULL, stringsAsFactors = FALSE) {
+cbind_id_tbl <- function(..., keep.rownames = FALSE, check.names = FALSE,
+                         key = NULL, stringsAsFactors = FALSE) {
 
   lst <- list(...)
   check <- lgl_ply(lst, is_id_tbl)
@@ -142,17 +146,16 @@ str.id_tbl <- function(object, ...) invisible(prt::str_dt(object, ...))
 #' @param use.names,fill,idcol Forwarded to [data.table::rbindlist]
 #'
 #' @rdname tbl_reshape
-#'
 #' @export
-.rbind.id_tbl <- function(..., use.names = TRUE, fill = FALSE, idcol = NULL) {
+rbind_id_tbl <- function(..., use.names = TRUE, fill = FALSE, idcol = NULL) {
   rbind_lst(list(...), use.names = use.names, fill = fill, idcol = idcol)
 }
 
 #' @rawNamespace if (getRversion() >= "4.0.0") { S3method(cbind, id_tbl) }
-cbind.id_tbl <- .cbind.id_tbl
+cbind.id_tbl <- cbind_id_tbl
 
 #' @rawNamespace if (getRversion() >= "4.0.0") { S3method(rbind, id_tbl) }
-rbind.id_tbl <- .rbind.id_tbl
+rbind.id_tbl <- rbind_id_tbl
 
 #' @param x,y Objects to combine
 #' @param by,by.x,by.y Column names used for combining data
@@ -163,11 +166,22 @@ merge.id_tbl <- function(x, y, by = NULL, by.x = NULL, by.y = NULL, ...) {
 
   targ <- NULL
 
+  if (xor(is_win_tbl(x), is_win_tbl(y)) &&
+      xor(!is_win_tbl(x) && is_ts_tbl(x), !is_win_tbl(y) && is_ts_tbl(y))) {
+    stop_ricu("`win_tbl` objects should be converted to `ts_tbl` objects using
+               `expand()` before merging with `ts_tbl` objects",
+              class = "merge_win_tbl")
+  }
+
   if (is_id_tbl(y)) {
 
     if (is_ts_tbl(x) && is_ts_tbl(y)) {
 
       assert_that(same_time(interval(x), interval(y)))
+
+      if (is_win_tbl(x)) {
+        assert_that(identical(dur_unit(x), dur_unit(y)))
+      }
 
       if (setequal(meta_vars(x), meta_vars(y))) {
         if (is.null(by))   by   <- meta_vars(x)
@@ -242,8 +256,26 @@ rbind_lst <- function(x, ...) {
     rename_cols(x, fun(new), fun(x), by_ref = TRUE)
   }
 
+  if (length(x) == 0L) {
+    return(data.table())
+  }
+
+  rows <- int_ply(x, nrow)
+
+  if (all(rows == 0L)) {
+    return(x[[1L]])
+  }
+
+  x <- x[rows > 0L]
+
+  if (length(x) == 1L) {
+    return(x[[1L]])
+  }
+
+  win_tbl <- lgl_ply(x, is_win_tbl)
+
   id_tbl <- lgl_ply(x, is_id_tbl)
-  ts_tbl <- lgl_ply(x, is_ts_tbl)
+  ts_tbl <- lgl_ply(x, is_ts_tbl) & !win_tbl
   id_tbl <- id_tbl & !ts_tbl
 
   if (any(id_tbl)) {
@@ -264,6 +296,19 @@ rbind_lst <- function(x, ...) {
     ptyp <- NULL
   }
 
+  if (sum(win_tbl) >= 2L) {
+
+    units <- chr_ply(x[win_tbl], dur_unit)
+    targ  <- min_time_unit(units)
+
+    todo <- rep_along(FALSE, x)
+    todo[win_tbl] <- units != targ
+
+    if (any(todo)) {
+      x[todo] <- lapply(x[todo], change_dur_unit, targ)
+    }
+  }
+
   if (not_null(ptyp)) {
 
     id_tbls <- lgl_ply(x, is_id_tbl)
@@ -276,7 +321,11 @@ rbind_lst <- function(x, ...) {
 
   res <- reclass_tbl(dt_rbl(x, ...), ptyp)
 
-  sort(res, by_ref = TRUE)
+  if (is_id_tbl(res)) {
+    res <- sort(res, by_ref = TRUE)
+  }
+
+  res
 }
 
 #' @rdname tbl_reshape

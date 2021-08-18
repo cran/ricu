@@ -6,6 +6,7 @@
 \alias{load_concepts.concept}
 \alias{load_concepts.cncpt}
 \alias{load_concepts.num_cncpt}
+\alias{load_concepts.unt_cncpt}
 \alias{load_concepts.fct_cncpt}
 \alias{load_concepts.lgl_cncpt}
 \alias{load_concepts.rec_cncpt}
@@ -36,6 +37,8 @@ load_concepts(x, ...)
 \method{load_concepts}{cncpt}(x, aggregate = NULL, ..., progress = NULL)
 
 \method{load_concepts}{num_cncpt}(x, aggregate = NULL, ..., progress = NULL)
+
+\method{load_concepts}{unt_cncpt}(x, aggregate = NULL, ..., progress = NULL)
 
 \method{load_concepts}{fct_cncpt}(x, aggregate = NULL, ..., progress = NULL)
 
@@ -108,7 +111,7 @@ concepts and the value passed as \code{merge_data}.
 Concept objects are used in \code{ricu} as a way to specify how a clinical
 concept, such as heart rate can be loaded from a data source. Building on
 this abstraction, \code{load_concepts()} powers concise loading of data with
-data source specific pre-processing hidden away from the user, thereby
+data source specific preprocessing hidden away from the user, thereby
 providing a data source agnostic interface to data loading. At default
 value of the argument \code{merge_data}, a tabular data structure (either a
 \code{\link[=ts_tbl]{ts_tbl}} or an \code{\link[=id_tbl]{id_tbl}}, depending on what kind of
@@ -209,7 +212,7 @@ is used to define a patient cohort for which data can be requested. Values
 may either be a vector of IDs (which are assumed to be of the same type as
 specified by the \code{id_type} argument) or a tabular object inheriting from
 \code{data.frame}, which must contain a column named after the data set-specific
-ID system identifier (for MIIMIC-III and an \code{id_type} argument of \code{hadm},
+ID system identifier (for MIMIC-III and an \code{id_type} argument of \code{hadm},
 for example, that would be \code{hadm_id}).
 }
 

@@ -140,9 +140,14 @@ import_src.aumc_cfg <- function(x, ...) {
   NextMethod(locale = readr::locale(encoding = "latin1"))
 }
 
+#' @param cleanup Logical flag indicating whether to remove raw csv files after
+#' conversion to fst
+#'
+#' @rdname import
 #' @export
 import_src.character <- function(x, data_dir = src_data_dir(x), tables = NULL,
-                                 force = FALSE, verbose = TRUE, ...) {
+                                 force = FALSE, verbose = TRUE, cleanup = FALSE,
+                                 ...) {
 
   if (is.character(tables)) {
 
@@ -158,7 +163,7 @@ import_src.character <- function(x, data_dir = src_data_dir(x), tables = NULL,
   assert_that(is.list(tables))
 
   Map(import_src, load_src_cfg(x, ...), data_dir, tables, force,
-      MoreArgs = list(verbose = verbose))
+      MoreArgs = list(verbose = verbose, cleanup = cleanup))
 
   invisible(NULL)
 }
@@ -168,8 +173,6 @@ import_src.default <- function(x, ...) stop_generic(x, .Generic)
 
 #' @param progress Either `NULL` or a progress bar as created by
 #' [progress::progress_bar()]
-#' @param cleanup Logical flag indicating whether to remove raw csv files after
-#' conversion to fst
 #'
 #' @rdname import
 #' @export
@@ -414,6 +417,28 @@ report_problems <- function(x, file) {
       c("Encountered parsing problems for file {file}:", out),
       class = "csv_parsing_error", indent = c(0L, rep_along(2L, out)),
       exdent = c(0L, rep_along(2L, out))
+    )
+  }
+
+  invisible(NULL)
+}
+
+report_problems <- function(x, file) {
+
+  prob_to_str <- function(x) {
+    paste0("[", x[1L], ", ", x[2L], "]: got '", x[4L], "' instead of ", x[3L])
+  }
+
+  probs <- readr::problems(x)
+
+  if (nrow(probs)) {
+
+    probs <- bullet(apply(probs, 1L, prob_to_str))
+
+    warn_ricu(
+      c("Encountered parsing problems for file {basename(file)}:", probs),
+      class = "csv_parsing_error", indent = c(0L, rep_along(2L, probs)),
+      exdent = c(0L, rep_along(2L, probs))
     )
   }
 

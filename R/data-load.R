@@ -159,6 +159,17 @@ load_difftime.aumc_tbl <- function(x, rows, cols = colnames(x),
 
 #' @rdname load_src
 #' @export
+load_difftime.miiv_tbl <- function(x, rows, cols = colnames(x),
+                                   id_hint = id_vars(x),
+                                   time_vars = ricu::time_vars(x), ...) {
+
+  warn_dots(...)
+
+  load_mihi(x, {{ rows }}, cols, id_hint, time_vars)
+}
+
+#' @rdname load_src
+#' @export
 load_difftime.character <- function(x, src, ...) {
   load_difftime(as_src_tbl(x, src), ...)
 }
@@ -323,8 +334,12 @@ load_id.character <- function(x, src, ...) {
 
 #' @rdname load_tbl
 #' @export
-load_id.itm <- function(x, cols = colnames(x), id_var = id_vars(x), ...) {
-  load_id(as_src_tbl(x), !!prepare_query(x), cols, id_var, ...)
+load_id.itm <- function(x, cols = colnames(x), id_var = id_vars(x),
+                        interval = hours(1L), time_vars = ricu::time_vars(x),
+                        ...) {
+
+  load_id(as_src_tbl(x), !!prepare_query(x), cols, id_var, interval,
+          time_vars, ...)
 }
 
 #' @rdname load_tbl
@@ -376,9 +391,12 @@ load_ts.character <- function(x, src, ...) {
 #' @rdname load_tbl
 #' @export
 load_ts.itm <- function(x, cols = colnames(x), id_var = id_vars(x),
-                        index_var = ricu::index_var(x), ...) {
+                        index_var = ricu::index_var(x),
+                        interval = hours(1L), time_vars = ricu::time_vars(x),
+                        ...) {
 
-  load_ts(as_src_tbl(x), !!prepare_query(x), cols, id_var, index_var, ...)
+  load_ts(as_src_tbl(x), !!prepare_query(x), cols, id_var, index_var,
+          interval, time_vars, ...)
 }
 
 #' @rdname load_tbl
@@ -388,3 +406,66 @@ load_ts.fun_itm <- function(x, ...) stop_generic(x, .Generic)
 #' @rdname load_tbl
 #' @export
 load_ts.default <- function(x, ...) load_ts(as_src_tbl(x), ...)
+
+#' @param dur_var The column used for determining durations
+#' @param dur_is_end Logical flag indicating whether to use durations as-is or
+#' to calculated them by subtracting the `index_var` column
+#'
+#' @rdname load_tbl
+#' @export
+load_win <- function(x, ...) UseMethod("load_win", x)
+
+#' @rdname load_tbl
+#' @export
+load_win.src_tbl <- function(x, rows, cols = colnames(x), id_var = id_vars(x),
+                             index_var = ricu::index_var(x),
+                             interval = hours(1L), dur_var = ricu::dur_var(x),
+                             dur_is_end = TRUE, time_vars = ricu::time_vars(x),
+                             ...) {
+
+  warn_dots(...)
+
+  assert_that(is.string(index_var), is.string(dur_var), is.flag(dur_is_end))
+
+  res <- load_difftime(x, {{ rows }}, c(cols, index_var, dur_var), id_var,
+                       time_vars)
+
+  if (dur_is_end) {
+    res <- res[, c(dur_var) := get(dur_var) - get(index_var)]
+  }
+
+  res <- as_win_tbl(res, id_vars(res), index_var, mins(1L), dur_var,
+                    by_ref = TRUE)
+
+  time_vars <- setdiff(intersect(time_vars, colnames(res)), dur_var)
+
+  res <- change_id(res, id_var, x, cols = time_vars, keep_old_id = FALSE)
+  res <- change_interval(res, interval, time_vars, by_ref = TRUE)
+
+  res
+}
+
+#' @rdname load_tbl
+#' @export
+load_win.character <- function(x, src, ...) load_win(as_src_tbl(x, src), ...)
+
+#' @rdname load_tbl
+#' @export
+load_win.itm <- function(x, cols = colnames(x), id_var = id_vars(x),
+                         index_var = ricu::index_var(x),
+                         interval = hours(1L), dur_var = ricu::dur_var(x),
+                         dur_is_end = TRUE, time_vars = ricu::time_vars(x),
+                         ...) {
+
+  load_win(as_src_tbl(x), !!prepare_query(x), cols, id_var, index_var,
+           interval, dur_var, dur_is_end, time_vars, ...)
+}
+
+#' @rdname load_tbl
+#' @export
+load_win.fun_itm <- function(x, ...) stop_generic(x, .Generic)
+
+#' @rdname load_tbl
+#' @export
+load_win.default <- function(x, ...) load_win(as_src_tbl(x), ...)
+

@@ -4,7 +4,7 @@
 #' Concept objects are used in `ricu` as a way to specify how a clinical
 #' concept, such as heart rate can be loaded from a data source. Building on
 #' this abstraction, `load_concepts()` powers concise loading of data with
-#' data source specific pre-processing hidden away from the user, thereby
+#' data source specific preprocessing hidden away from the user, thereby
 #' providing a data source agnostic interface to data loading. At default
 #' value of the argument `merge_data`, a tabular data structure (either a
 #' [`ts_tbl`][ts_tbl()] or an [`id_tbl`][id_tbl()], depending on what kind of
@@ -101,7 +101,7 @@
 #' may either be a vector of IDs (which are assumed to be of the same type as
 #' specified by the `id_type` argument) or a tabular object inheriting from
 #' `data.frame`, which must contain a column named after the data set-specific
-#' ID system identifier (for MIIMIC-III and an `id_type` argument of `hadm`,
+#' ID system identifier (for MIMIC-III and an `id_type` argument of `hadm`,
 #' for example, that would be `hadm_id`).
 #'
 #' @section Extensions:
@@ -233,6 +233,10 @@ load_concepts.concept <- function(x, src = NULL, aggregate = NULL,
   }
 
   if (length(res) > 1L) {
+
+    wn <- lgl_ply(res, is_win_tbl)
+
+    res[wn] <- Map(expand, res[wn], aggregate = aggregate[wn])
 
     ts <- lgl_ply(res, is_ts_tbl)
     id <- lgl_ply(res, is_id_tbl) & ! ts
@@ -369,6 +373,52 @@ load_concepts.num_cncpt <- function(x, aggregate = NULL, ...,
   stats::aggregate(x, res, aggregate)
 }
 
+align_units <- function(x, target_unit) {
+
+  do_align <- function(val, unt, trg) {
+    if (units::ud_are_convertible(unt[1L], trg)) {
+      units::drop_units(set_units(set_units(val, unt[1L]), trg))
+    } else {
+      rep_along(NA_real_, val)
+    }
+  }
+
+  assert_that(has_cols(x, c("val_var", "unit_var")))
+
+  x <- rm_na_val_var(x)
+
+  x <- x[, c("val_var") := do_align(get("val_var"), get("unit_var"),
+          target_unit), by = c("unit_var")]
+
+  rmed <- is.na(x[["val_var"]])
+
+  if (any(rmed)) {
+    hits <- table(x[["unit_var"]][rmed], useNA = "ifany")
+    msg_progress("not all units could be converted and `NA` values were
+      introduced: {concat(names(hits), ' (', prcnt(hits, nrow(x)), ')')}"
+    )
+  }
+
+  x
+}
+
+#' @rdname load_concepts
+#' @export
+load_concepts.unt_cncpt <- function(x, aggregate = NULL, ...,
+                                    progress = NULL) {
+
+  res <- load_concepts(as_item(x), ..., progress = progress)
+  res <- align_units(res, units(x))
+  res <- filter_bounds(res, "val_var", min(x), max(x))
+
+  setattr(res[["val_var"]], "units", units(x))
+
+  res <- rm_cols(res, setdiff(data_vars(res), "val_var"), by_ref = TRUE)
+  res <- rename_cols(res, x[["name"]], "val_var", by_ref = TRUE)
+
+  stats::aggregate(x, res, aggregate)
+}
+
 #' @rdname load_concepts
 #' @export
 load_concepts.fct_cncpt <- function(x, aggregate = NULL, ...,
@@ -379,7 +429,10 @@ load_concepts.fct_cncpt <- function(x, aggregate = NULL, ...,
   res <- load_concepts(as_item(x), ..., progress = progress)
   res <- rm_na_val_var(res)
 
-  if (is.character(lvl)) {
+  if (nrow(res) == 0L) {
+    keep <- TRUE
+    res  <- set(res, j = "val_var", value = character())
+  } else if (is.character(lvl)) {
     keep <- res[["val_var"]] %chin% lvl
   } else {
     keep <- res[["val_var"]] %in% lvl
@@ -418,12 +471,6 @@ load_concepts.lgl_cncpt <- function(x, aggregate = NULL, ...,
   res <- set(res, j = "val_var", value = force_lgl(res[["val_var"]]))
 
   res <- stats::aggregate(x, res, aggregate)
-
-  if (is.null(aggregate) || identical(aggregate, "any")) {
-    # default aggregation corresponds to any()
-    res <- set(res, j = "val_var", value = force_lgl(res[["val_var"]]))
-  }
-
   res <- rename_cols(res, x[["name"]], "val_var", by_ref = TRUE)
 
   res
@@ -508,8 +555,13 @@ load_concepts.itm <- function(x, patient_ids = NULL, id_type = "icustay",
 
   res <- do_itm_load(x, id_type, interval = interval)
   res <- merge_patid(res, patient_ids)
+  res <- do_callback(x, res)
 
-  do_callback(x, res)
+  if (is_ts_tbl(res)) {
+    res <- change_interval(res, interval, index_var(res), by_ref = TRUE)
+  }
+
+  res
 }
 
 #' @export

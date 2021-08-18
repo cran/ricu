@@ -1,8 +1,8 @@
 
 #' Tabular ICU data classes
 #'
-#' In order to simplify handling or tabular ICU data, `ricu` provides two
-#' S3 classes, `id_tbl` and `ts_tbl`. The two classes essentially
+#' In order to simplify handling or tabular ICU data, `ricu` provides
+#' S3 classes, `id_tbl`, `ts_tbl`, and `win_tbl`. These classes essentially
 #' consist of a `data.table` object, alongside some meta data and S3 dispatch
 #' is used to enable more natural behavior for some data manipulation tasks.
 #' For example, when merging two tables, a default for the `by` argument can
@@ -10,7 +10,8 @@
 #' information can be identified.
 #'
 #' @details
-#' The two classes are designed for two often encountered data scenarios:
+#' The introduced classes are designed for several often encountered data
+#' scenarios:
 #'
 #' * `id_tbl` objects can be used to represent static (with respect to
 #'   relevant time scales) patient data such as patient age and such an object
@@ -25,22 +26,30 @@
 #'   ([index_var][index_var()]) and a scalar `difftime` object determining
 #'   the time-series step size [interval][interval()]. Again, all further
 #'   columns are treated as [data_vars][data_vars()].
+#' * `win_tbl`: In addition to representing grouped time-series data as does
+#'   a `ts_tbl`, `win_tbl` objects also encode a validity interval for each
+#'   time-stamped measurement (as [dur_var][dur_var()]). This can for example
+#'   be useful when a drug is administered at a certain infusion rate for a
+#'   given time period.
 #'
 #' Owing to the nested structure of required meta data, `ts_tbl` inherits from
-#' `id_tbl`. Furthermore, both classes inherit from `data.table`. As such,
-#' `data.table` [reference semantics][data.table::set()] are available for
-#' some operations, indicated by presence of a `by_ref` argument. At default,
-#' value, `by_ref` is set to `FALSE` as this is in line with base R behavior
-#' at the cost of potentially incurring unnecessary data copies. Some care has
-#' to be taken when passing `by_ref = TRUE` and enabling by reference
-#' operations as this can have side effects (see examples).
+#' `id_tbl` and `win_tbl` from `ts_tbl`. Furthermore, both classes inherit from
+#' `data.table`. As such, `data.table` [reference semantics][data.table::set()]
+#' are available for some operations, indicated by presence of a `by_ref`
+#' argument. At default, value, `by_ref` is set to `FALSE` as this is in line
+#' with base R behavior at the cost of potentially incurring unnecessary data
+#' copies. Some care has to be taken when passing `by_ref = TRUE` and enabling
+#' by reference operations as this can have side effects (see examples).
 #'
 #' For instantiating `ts_tbl` objects, both `index_var` and `interval` can be
 #' automatically determined if not specified. For the index column, the only
 #' requirement is that a single [`difftime`][base::difftime()] column is
 #' present, while for the time step, the minimal difference between two
 #' consecutive observations is chosen (and all differences are therefore
-#' required to be multiples of the minimum difference).
+#' required to be multiples of the minimum difference). Similarly, for a
+#' `win_tbl`, exactly two [`difftime`][base::difftime()] columns are required
+#' where the first is assumed to be corresponding to the `index_var` and the
+#' second to the `dur_var`.
 #'
 #' Upon instantiation, the data might be rearranged: columns are reordered
 #' such that ID columns are moved to the front, followed by the index column
@@ -51,12 +60,12 @@
 #' operations. Furthermore, `NA` values in either ID or index columns are not
 #' allowed and therefore corresponding rows are silently removed.
 #'
-#' Coercion between `id_tbl` and `ts_tbl` by default keeps intersecting
-#' attributes fixed and new attributes are by default inferred as for class
-#' instantiation. Each class comes with a class-specific implementation of the
-#' S3 generic function `validate_tbl()` which returns `TRUE` if the object is
-#' considered valid or a string outlining the type of validation failure that
-#' was encountered. Validity requires
+#' Coercion between `id_tbl` and `ts_tbl` (and `win_tbl`) by default keeps
+#' intersecting attributes fixed and new attributes are by default inferred as
+#' for class instantiation. Each class comes with a class-specific
+#' implementation of the S3 generic function `validate_tbl()` which returns
+#' `TRUE` if the object is considered valid or a string outlining the type of
+#' validation failure that was encountered. Validity requires
 #'
 #' 1. inheriting from `data.table` and unique column names
 #' 1. for `id_tbl` that all columns specified by the non-zero length character
@@ -64,11 +73,14 @@
 #' 1. for `ts_tbl` that the string-valued `index_var` column is available and
 #'    does not intersect with `id_vars` and that the index column obeys the
 #'    specified interval.
+#' 1. for `win_tbl` that the string-valued `dur_var` corresponds to a `difftime`
+#'    vector and is not among the columns marked as index or ID variables
 #'
 #' Finally, inheritance can be checked by calling `is_id_tbl()` and
 #' `is_ts_tbl()`. Note that due to `ts_tbl` inheriting from `id_tbl`,
-#' `is_id_tbl()` returns `TRUE` for both `id_tbl` and `ts_tbl` objects, while
-#' `is_ts_tbl()` only returns `TRUE` for `ts_tbl` objects.
+#' `is_id_tbl()` returns `TRUE` for both `id_tbl` and `ts_tbl` objects (and
+#' similarly for `win_tbl`), while `is_ts_tbl()` only returns `TRUE` for
+#' `ts_tbl` objects.
 #'
 #' @section Relationship to `data.table`:
 #' Both `id_tbl` and `ts_tbl` inherit from `data.table` and as such, functions
@@ -134,11 +146,12 @@
 #' @param ... forwarded to [data.table::data.table()] or generic consistency
 #' @param id_vars Column name(s) to be used as `id` column(s)
 #'
-#' @return Constructors `id_tbl()`/`ts_tbl()`, as well as coercion functions
-#' `as_id_tbl()`/`as_ts_tbl()` return `id_tbl`/`ts_tbl` objects respectively,
-#' while inheritance testers `is_id_tbl()`/`is_ts_tbl()` return logical flags
-#' and `validate_tbl()` returns either `TRUE` or a string describing the
-#' validation failure.
+#' @return Constructors `id_tbl()`/`ts_tbl()`/`win_tbl()`, as well as coercion
+#' functions `as_id_tbl()`/`as_ts_tbl()`/`as_win_tbl()` return
+#' `id_tbl`/`ts_tbl`/`win_tbl` objects respectively,
+#' while inheritance testers `is_id_tbl()`/`is_ts_tbl()`/`is_win_tbl()` return
+#' logical flags and `validate_tbl()` returns either `TRUE` or a string
+#' describing the validation failure.
 #'
 #' @rdname id_tbl
 #' @export
@@ -184,25 +197,6 @@ as_id_tbl.default <- function(x, id_vars = NULL, by_ref = FALSE) {
   as_id_tbl(x, id_vars = id_vars, by_ref = by_ref)
 }
 
-new_id_tbl <- function(x, id_vars, ..., class = character()) {
-
-  if (is.null(id_vars)) {
-    if (data.table::haskey(x)) {
-      id_vars <- data.table::key(x)
-    } else {
-      id_vars <- 1L
-    }
-  }
-
-  if (is.numeric(id_vars) || is.logical(id_vars)) {
-    id_vars <- colnames(x)[id_vars]
-  }
-
-  assert_that(is.character(id_vars), has_length(id_vars))
-
-  new_tbl(x, id_vars = unname(id_vars), ..., class = c(class, "id_tbl"))
-}
-
 #' @param index_var Column name of the index column
 #' @param interval Time series interval length specified as scalar-valued
 #' `difftime` object
@@ -219,8 +213,8 @@ is_ts_tbl <- is_type("ts_tbl")
 
 #' @rdname id_tbl
 #' @export
-as_ts_tbl <- function(x, id_vars = NULL, index_var = NULL,
-                      interval = NULL, by_ref = FALSE) {
+as_ts_tbl <- function(x, id_vars = NULL, index_var = NULL, interval = NULL,
+                      by_ref = FALSE) {
 
   UseMethod("as_ts_tbl", x)
 }
@@ -260,7 +254,102 @@ as_ts_tbl.default <- function(x, id_vars = NULL, index_var = NULL,
             by_ref = by_ref)
 }
 
-new_ts_tbl <- function(x, id_vars, index_var = NULL, interval = NULL,
+#' @param dur_var Column name of the duration column
+#'
+#' @rdname id_tbl
+#' @export
+win_tbl <- function(..., id_vars = NULL, index_var = NULL, interval = NULL,
+                    dur_var = NULL) {
+  as_win_tbl(list(...), id_vars, index_var, interval, dur_var, by_ref = TRUE)
+}
+
+#' @rdname id_tbl
+#' @export
+is_win_tbl <- is_type("win_tbl")
+
+#' @rdname id_tbl
+#' @export
+as_win_tbl <- function(x, id_vars = NULL, index_var = NULL, interval = NULL,
+                       dur_var = NULL, by_ref = FALSE) {
+
+  UseMethod("as_win_tbl", x)
+}
+
+#' @export
+as_win_tbl.win_tbl <- function(x, id_vars = NULL, index_var = NULL,
+                               interval = NULL, dur_var = NULL, ...) {
+
+  as_win_tbl.ts_tbl(x, id_vars, index_var, interval,
+                    coalesce(dur_var, dur_var(x)), ...)
+}
+
+#' @export
+as_win_tbl.ts_tbl <- function(x, id_vars = NULL, index_var = NULL,
+                             interval = NULL, ...) {
+
+  as_win_tbl.id_tbl(x, id_vars, coalesce(index_var, index_var(x)),
+                   coalesce(interval, interval(x)), ...)
+}
+
+#' @export
+as_win_tbl.id_tbl <- function(x, id_vars = NULL, ...) {
+  as_win_tbl.data.table(x, coalesce(id_vars, id_vars(x)), ...)
+}
+
+#' @method as_win_tbl data.table
+#' @export
+as_win_tbl.data.table <- function(x, ...) new_win_tbl(x, ...)
+
+#' @export
+as_win_tbl.default <- function(x, ..., by_ref = FALSE) {
+
+  if (isTRUE(by_ref)) {
+    x <- setDT(x)
+  } else {
+    x <- as.data.table(x)
+  }
+
+  as_win_tbl(x, ..., by_ref = by_ref)
+}
+
+new_win_tbl <- function(x, id_vars = NULL, index_var = NULL, interval = NULL,
+                        dur_var = NULL, ..., class = character()) {
+
+  if (is.null(index_var) || is.null(dur_var)) {
+    opts <- time_vars(x)
+  }
+
+  if (is.null(index_var) && is.null(dur_var)) {
+
+    assert_that(length(opts) == 2L, msg = "In order to automatically determine
+      both the index and duration columns, exactly two `difftime` columns are
+      required.")
+
+    index_var <- opts[1L]
+    dur_var <- opts[2L]
+
+  } else if (is.null(index_var)) {
+
+    index_var <- setdiff(opts, dur_var)
+
+    assert_that(length(index_var) == 1L, msg = "In order to automatically
+      determine the index column, exactly one `difftime` column apart from the
+      duration column is required.")
+
+  } else if (is.null(dur_var)) {
+
+    dur_var <- setdiff(opts, index_var)
+
+    assert_that(length(dur_var) == 1L, msg = "In order to automatically
+      determine the duration column, exactly one `difftime` column apart from
+      the index column is required.")
+  }
+
+  new_ts_tbl(x, id_vars, index_var, interval, dur_var = dur_var, ...,
+             class = c(class, "win_tbl"))
+}
+
+new_ts_tbl <- function(x, id_vars = NULL, index_var = NULL, interval = NULL,
                        ..., class = character()) {
 
   if (is.null(index_var)) {
@@ -290,6 +379,25 @@ new_ts_tbl <- function(x, id_vars, index_var = NULL, interval = NULL,
   }
 
   res
+}
+
+new_id_tbl <- function(x, id_vars = NULL, ..., class = character()) {
+
+  if (is.null(id_vars)) {
+    if (data.table::haskey(x)) {
+      id_vars <- data.table::key(x)
+    } else {
+      id_vars <- 1L
+    }
+  }
+
+  if (is.numeric(id_vars) || is.logical(id_vars)) {
+    id_vars <- colnames(x)[id_vars]
+  }
+
+  assert_that(is.character(id_vars), has_length(id_vars))
+
+  new_tbl(x, id_vars = unname(id_vars), ..., class = c(class, "id_tbl"))
 }
 
 new_tbl <- function(x, ..., class, by_ref = TRUE) {
@@ -416,6 +524,11 @@ unclass_tbl <- function(x) UseMethod("unclass_tbl", x)
 unclass_tbl.data.frame <- function(x) x
 
 #' @export
+unclass_tbl.win_tbl <- function(x) {
+  unclass_tbl(set_attributes(x, dur_var = NULL, class = strip_class(x)))
+}
+
+#' @export
 unclass_tbl.ts_tbl <- function(x) {
   unclass_tbl(
     set_attributes(x, index_var = NULL, interval = NULL,
@@ -472,6 +585,20 @@ reclass_tbl.ts_tbl <- function(x, template, stop_on_fail = TRUE) {
   NextMethod(object = template)
 }
 
+#' @export
+reclass_tbl.win_tbl <- function(x, template, stop_on_fail = TRUE) {
+
+  x <- NextMethod(object = template)
+
+  x <- set_attributes(x, dur_var = dur_var(template), class = .Class)
+
+  if (isTRUE(validate_tbl(x))) {
+    return(x)
+  }
+
+  NextMethod(object = template)
+}
+
 #' @method reclass_tbl data.table
 #' @export
 reclass_tbl.data.table <- function(x, template, stop_on_fail = TRUE) {
@@ -490,7 +617,12 @@ reclass_tbl.default <- function(x, template, ...) {
 }
 
 try_reclass <- function(x, template) {
-  reclass_tbl(x, template, stop_on_fail = FALSE)
+
+  if (is_df(x)) {
+    reclass_tbl(x, template, stop_on_fail = FALSE)
+  } else {
+    x
+  }
 }
 
 #' @rdname tbl_internal
@@ -548,6 +680,19 @@ validate_tbl.ts_tbl <- function(x) {
   res <- validate_that(
     is.string(invar), has_cols(x, invar), is_disjoint(id_vars(x), invar),
     obeys_interval(index, inval), same_unit(index, inval)
+  )
+
+  if (isTRUE(res)) NextMethod() else res
+}
+
+#' @export
+validate_tbl.win_tbl <- function(x) {
+
+  dvar <- dur_var(x)
+
+  res <- validate_that(
+    is.string(dvar), has_cols(x, dvar), is_disjoint(id_vars(x), dvar),
+    is_disjoint(dvar, index_var(x)), is_difftime(dur_col(x))
   )
 
   if (isTRUE(res)) NextMethod() else res

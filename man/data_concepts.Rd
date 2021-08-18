@@ -5,6 +5,7 @@
 \alias{is_cncpt}
 \alias{init_cncpt}
 \alias{init_cncpt.num_cncpt}
+\alias{init_cncpt.unt_cncpt}
 \alias{init_cncpt.fct_cncpt}
 \alias{init_cncpt.cncpt}
 \alias{init_cncpt.rec_cncpt}
@@ -30,6 +31,8 @@ is_cncpt(x)
 init_cncpt(x, ...)
 
 \method{init_cncpt}{num_cncpt}(x, unit = NULL, min = NULL, max = NULL, ...)
+
+\method{init_cncpt}{unt_cncpt}(x, unit = NULL, min = NULL, max = NULL, ...)
 
 \method{init_cncpt}{fct_cncpt}(x, levels, ...)
 
@@ -140,6 +143,8 @@ recursive concepts up to arbitrary recursion depth. Owing to the more
 complicated nature of such concepts, a \code{callback} function can be
 specified which is used in data loading for concept-specific post-
 processing steps.
+\item \code{unt_cncpt}: A recent (experimental) addition which inherits from
+\code{num_cncpt} but instead of manual unit conversion, leverages
 }
 
 Class instantiation is organized in the same fashion as for

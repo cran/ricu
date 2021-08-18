@@ -48,7 +48,7 @@
 #' above is desired by the user, an environment such as `.GlobalEnv` has to be
 #' passed as `assign_env` to `attach_src()`.
 #'
-#' Data sets are set up as `src_env` objects irrespectively of whether all (or
+#' Data sets are set up as `src_env` objects irrespective of whether all (or
 #' any) of the required data is available. If some (or all) data is missing,
 #' the user is asked for permission to download in interactive sessions and an
 #' error is thrown in non-interactive sessions. Downloading demo datasets
@@ -139,6 +139,18 @@ attach_src.src_cfg <- function(x, assign_env = NULL,
   })
 
   invisible(NULL)
+}
+
+#' @export
+attach_src.aumc_cfg <- function(x, assign_env = NULL,
+                                data_dir = src_data_dir(x), ...) {
+
+  if (requireNamespace("units", quietly = TRUE)) {
+    units::install_unit("uur", "h")
+    units::install_unit("dag", "d")
+  }
+
+  NextMethod()
 }
 
 #' @rdname attach_src
@@ -265,7 +277,8 @@ setup_src_env.src_cfg <- function(x, data_dir = src_data_dir(x),
         return(src_tbl_cache)
       }
 
-      msg_ricu("Data for `{src_name(src)}` is missing", "miss_tbl_msg")
+      msg_ricu("Data for `{src_name(src)}` is missing", "miss_tbl_msg",
+               tbl_cfg = tbl)
 
       if (is_interactive()) {
 

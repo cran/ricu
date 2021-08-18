@@ -724,28 +724,14 @@ los_callback <- function(x, id_type, interval) {
   res
 }
 
-mimic_abx_presc <- function(x, id_type, interval) {
+mimic_abx_presc <- function(x, val_var, ...) {
 
-  itm_cb <- function(x, val_var, ...) {
+  idx <- index_var(x)
 
-    idx <- index_var(x)
-
-    x <- x[, c(idx, val_var) := list(get(idx) + mins(720L), TRUE)]
-    x
-  }
-
-  itm <- set_callback(x, itm_cb)
-  itm <- do.call(new_itm, c(itm, list(class = "rgx_itm")))
-  res <- do_itm_load(itm, "hadm", mins(1L))
-
-  res <- change_id(res, id_type, src_name(x), keep_old_id = FALSE,
-                   id_type = TRUE)
-
-  res <- do_callback(itm, res)
-  res <- change_interval(res, interval, by_ref = TRUE)
-
-  res
+  x <- x[, c(idx, val_var) := list(get(idx) + mins(720L), TRUE)]
+  x
 }
+
 
 aumc_death <- function(x, val_var, ...) {
 
@@ -761,3 +747,117 @@ aumc_bxs <- function(x, val_var, dir_var, ...) {
 }
 
 aumc_rass <- function(x) as.integer(substr(x, 1L, 2L))
+
+dex_to_10 <- function(id, factor) {
+
+  assert_that(same_length(id, factor))
+
+  function(x, sub_var, val_var, ...) {
+
+    for (i in seq_along(id)) {
+      rows <- which(x[[sub_var]] %in% id[[i]])
+      set(x, i = rows, j = val_var, value = x[[val_var]][rows] * factor[[i]])
+    }
+
+    x
+  }
+}
+
+aumc_rate <- function(x, val_var, unit_var, rate_var, ...) {
+  x <- x[, c(unit_var) := do_call(.SD, paste, sep = "/"),
+         .SDcols = c(unit_var, rate_var)]
+  x
+}
+
+mimv_rate <- function(x, val_var, unit_var, dur_var, amount_var, auom_var,
+                      ...) {
+
+  x <- x[is.na(get(val_var)), c(val_var, unit_var) := list(
+    get(amount_var) / as.double(get(dur_var)),
+    paste0(get(auom_var), "/", units_to_unit(get(dur_var)))
+  )]
+
+  x
+}
+
+units_to_unit <- function(x) sub("s$", "", units(x))
+
+get_one_unique <- function(x, na.rm = FALSE) {
+
+  if (isTRUE(na.rm)) {
+    x <- x[!is.na(x)]
+  }
+
+  x <- unique(x)
+
+  if (length(x) > 1L) {
+    x <- NA_character_
+  }
+
+  x
+}
+
+grp_mount_to_rate <- function(min_dur, extra_dur) {
+
+  assert_that(is_interval(min_dur), is_interval(extra_dur))
+
+  function(x, val_var, grp_var, unit_var, ...) {
+
+    index_var <- index_var(x)
+    id_vars   <- id_vars(x)
+
+    expr <- quote(
+      list(min(get(index_var)),
+           max(get(index_var)),
+           sum(get(val_var), na.rm = TRUE),
+           get_one_unique(get(unit_var), na.rm = TRUE)
+      )
+    )
+    names(expr) <- c("", index_var, "dur_var", val_var, unit_var)
+
+    res <- x[, eval(expr), by = c(id_vars, grp_var)]
+    res <- res[, c("dur_var") := get("dur_var") - get(index_var)]
+
+    time_unit <- time_unit(res)
+
+    res <- res[, dur_var := data.table::fifelse(
+      dur_var == 0,
+      `units<-`(min_dur, time_unit),
+      dur_var + `units<-`(extra_dur, time_unit)
+    )]
+
+    res <- res[, c(val_var, unit_var) := list(
+      get(val_var) / as.double(get("dur_var")),
+      paste0(get(unit_var), "/", units_to_unit(get("dur_var")))
+    )]
+
+    as_win_tbl(res, dur_var = "dur_var", by_ref = TRUE)
+  }
+}
+
+eicu_dex_med <- function(x, val_var, dur_var, ...) {
+
+  x <- x[, c(val_var, "unit_var") := data.table::tstrsplit(get(val_var), " ")]
+  x <- x[, c(val_var) := as.numeric(sub("^(.+-|Manual)", "", get(val_var)))]
+
+  x <- x[grepl("^m?g.*m?", get("unit_var"), ignore.case = TRUE),
+          c(val_var) := get(val_var) * 2]
+
+  x <- x[get(dur_var) <= 0, c(dur_var) := mins(1L)]
+  x <- x[get(dur_var) <= hours(12L), ]
+
+  x <- x[, c(val_var, "unit_var") := list(
+    get(val_var) / as.double(get(dur_var)) * 5, "ml/min"
+  )]
+}
+
+eicu_dex_inf <- function(x, val_var, ...) {
+
+  ival <- `units<-`(interval(x), "mins")
+
+  x <- x[, c(val_var, "dur_var", "unit_var") := list(
+    as.numeric(get(val_var)), ival, "ml/hr"
+  )]
+
+  as_win_tbl(x, dur_var = "dur_var", by_ref = TRUE)
+}

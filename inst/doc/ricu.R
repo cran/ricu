@@ -1,4 +1,6 @@
-## ---- include = FALSE---------------------------------------------------------
+## ---- setup, include = FALSE----------------------------------------------
+source(system.file("extdata", "vignettes", "helpers.R", package = "ricu"))
+
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
@@ -6,48 +8,49 @@ knitr::opts_chunk$set(
 
 library(ricu)
 
-## ---- echo = FALSE------------------------------------------------------------
-demo  <- c("mimic_demo", "eicu_demo")
-alls  <- demo
+## ---- assign-src, echo = FALSE--------------------------------------------
+src  <- "mimic_demo"
 
-avail <- is_data_avail(alls)
+## ---- assign-demo, echo = FALSE-------------------------------------------
+demo <- c(src, "eicu_demo")
 
-srcs_avail <- function(x) all(avail[x])
+## ---- demo-miss, echo = FALSE, eval = !srcs_avail(demo), results = "asis"----
+#  demo_missing_msg(demo, "ricu.html")
+#  knitr::opts_chunk$set(eval = FALSE)
 
-if (!srcs_avail(alls)) {
-
-  msg <- paste(
-    "Note: Examples in this vignette require that one or more of datasets",
-    paste0("`", alls, "`", collapse = ", "), "are available. Chunks that",
-    "depend on certain datasets will not be evaluated if the corresponding",
-    "dataset is missing. In order to download and setup data, have a look at",
-    "`?setup_src_data`."
-  )
-  msg <- paste(strwrap(msg), collapse = "\n")
-  message(msg)
-}
-
-## ---- eval = FALSE------------------------------------------------------------
+## ---- eval = FALSE--------------------------------------------------------
 #  install.packages("ricu")
 
-## ---- eval = FALSE------------------------------------------------------------
+## ---- eval = FALSE--------------------------------------------------------
 #  remotes::install_github("eth-mds/ricu")
 
-## ---- eval = FALSE------------------------------------------------------------
-#  install.packages(
-#    c("mimic.demo", "eicu.demo"),
-#    repos = "https://eth-mds.github.io/physionet-demo"
-#  )
+## ---- echo = FALSE, eval = TRUE, results = "asis"-------------------------
+cat(
+  "```r\n",
+  "install.packages(\n",
+  "  c(", paste0("\"", sub("_", ".", demo), "\"", collapse = ", "), "),\n",
+  "  repos = \"https://eth-mds.github.io/physionet-demo\"\n",
+  ")\n",
+  "```\n",
+  sep = ""
+)
 
-## ---- eval = srcs_avail(demo)-------------------------------------------------
-head(explain_dictionary(src = c("mimic_demo", "eicu_demo")))
-load_concepts("alb", "mimic_demo", verbose = FALSE)
+## ---- load-ts-------------------------------------------------------------
+src  <- "mimic_demo"
+demo <- c(src, "eicu_demo")
 
-## ---- eval = srcs_avail("eicu_demo")------------------------------------------
-(dat <- load_concepts("height", "eicu_demo", verbose = FALSE))
-head(as.data.frame(dat, by_ref = TRUE))
+head(explain_dictionary(src = demo))
+load_concepts("alb", src, verbose = FALSE)
 
-## ---- eval = srcs_avail("mimic_demo")-----------------------------------------
+## ---- load-id-------------------------------------------------------------
+(dat <- load_concepts("height", src, verbose = FALSE))
+head(tmp <- as.data.frame(dat, by_ref = TRUE))
+identical(dat, tmp)
+
+## ---- load-mult-----------------------------------------------------------
+load_concepts("weight", demo, verbose = FALSE)
+
+## ---- create-concept, eval = srcs_avail("mimic_demo")---------------------
 ldh <- concept("ldh",
   item("mimic_demo", "labevents", "itemid", 50954),
   description = "Lactate dehydrogenase",
@@ -55,6 +58,6 @@ ldh <- concept("ldh",
 )
 load_concepts(ldh, verbose = FALSE)
 
-## ---- eval = FALSE------------------------------------------------------------
+## ---- eval = FALSE--------------------------------------------------------
 #  load_concepts("ldh", "mimic_demo")
 

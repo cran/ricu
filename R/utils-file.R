@@ -149,7 +149,7 @@ src_data_dir <- function(srcs) {
 
   assert_that(is.string(srcs))
 
-  pkg <- sub("_", ".", srcs)
+  pkg <- src_to_pkg_name(srcs)
 
   if (is_pkg_installed(pkg)) {
     system.file("extdata", package = pkg)
@@ -160,6 +160,8 @@ src_data_dir <- function(srcs) {
   }
 }
 
+src_to_pkg_name <- function(x) sub("_", ".", x)
+
 #' @importFrom utils packageDescription available.packages
 data_pkg_avail <- function(src) {
 
@@ -168,9 +170,9 @@ data_pkg_avail <- function(src) {
   }
 
   repos <- packageDescription("ricu", fields = "Additional_repositories")
-  pkgs  <- available.packages(repos = repos)
 
-  sub("_", ".", src) %in% pkgs[, "Package"]
+  curl::has_internet() &&
+    src_to_pkg_name(src) %in% available.packages(repos = repos)[, "Package"]
 }
 
 #' @importFrom utils install.packages
@@ -182,7 +184,7 @@ install_data_pkgs <- function(srcs = c("mimic_demo", "eicu_demo")) {
 
   repos <- packageDescription("ricu", fields = "Additional_repositories")
 
-  install.packages(sub("_", ".", srcs), repos = repos)
+  install.packages(src_to_pkg_name(srcs), repos = repos)
 }
 
 #' @rdname file_utils
@@ -192,7 +194,7 @@ auto_attach_srcs <- function() {
   res <- sys_env("RICU_SRC_LOAD", unset = NA_character_)
 
   if (is.na(res)) {
-    c("mimic", "mimic_demo", "eicu", "eicu_demo", "hirid", "aumc")
+    c("mimic", "mimic_demo", "eicu", "eicu_demo", "hirid", "aumc", "miiv")
   } else {
     strsplit(res, ",")[[1L]]
   }

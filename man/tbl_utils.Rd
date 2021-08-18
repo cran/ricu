@@ -4,6 +4,7 @@
 \alias{rename_cols}
 \alias{rm_cols}
 \alias{change_interval}
+\alias{change_dur_unit}
 \alias{rm_na}
 \alias{sort.id_tbl}
 \alias{is_sorted}
@@ -28,6 +29,8 @@ rename_cols(
 rm_cols(x, cols, skip_absent = FALSE, by_ref = FALSE)
 
 change_interval(x, new_interval, cols = time_vars(x), by_ref = FALSE)
+
+change_dur_unit(x, new_unit, by_ref = FALSE)
 
 rm_na(x, cols = data_vars(x), mode = c("all", "any"))
 
@@ -61,7 +64,8 @@ is_unique(x, ...)
 
 dt_gforce(
   x,
-  fun = c("mean", "median", "min", "max", "sum", "prod", "var", "sd", "first", "last"),
+  fun = c("mean", "median", "min", "max", "sum", "prod", "var", "sd", "first", "last",
+    "any", "all"),
   by = meta_vars(x),
   vars = data_vars(x),
   na_rm = !fun \%in\% c("first", "last")
@@ -86,6 +90,8 @@ reference}
 
 \item{new_interval}{Replacement interval length specified as scalar-valued
 \code{difftime} object}
+
+\item{new_unit}{New \code{difftime} unit for the \code{dur_var} column}
 
 \item{mode}{Switch between \code{all} where all entries of a row have to be
 missing (for the selected columns) or \code{any}, where a single missing entry
@@ -116,8 +122,8 @@ columns to the front.}
 \item{type}{ character, one of \emph{"const"}, \emph{"locf"} or \emph{"nocb"}. Defaults to \code{"const"}. }
 }
 \value{
-Most of the utility functions return either an \code{id_tbl} or a
-\code{ts_tbl}, potentially modified by reference, depending on the type of the
+Most of the utility functions return an object inheriting from
+\code{id_tbl}, potentially modified by reference, depending on the type of the
 object passed as \code{x}. The functions \code{is_sorted()}, \code{anyDuplicated()} and
 \code{is_unique()} return logical flags, while \code{duplicated()} returns a logical
 vector of the length \code{nrow(x)}.

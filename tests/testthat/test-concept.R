@@ -8,12 +8,7 @@ test_that("load hirid items", {
       class = c("hirid_tbl", "src_tbl"),
       col_cfg = new_col_cfg("hirid", "observations", index_var = "datetime",
                             time_vars = c("datetime", "entertime"),
-                            val_var = "value"),
-      src_env = structure(list(),
-        class = c("hirid_env", "src_env"),
-        id_cfg = new_id_cfg("hirid",  "icustay", "patientid", 1L,
-                            "admissiontime", NA_character_, "general")
-      )
+                            val_var = "value")
     ),
     parse_dictionary(read_dictionary("concept-dict"), "hirid", "glu")
   )
@@ -21,6 +16,8 @@ test_that("load hirid items", {
   expect_identical(n_tick(gluc), 2L)
 
   gluc <- as_item(gluc)[[1L]]
+  gluc <- try_add_vars(gluc, id_var = "patientid", index_var = "datetime",
+                       type = "meta_vars")
 
   dat <- mockthat::with_mock(
     load_ts = ts_tbl(
@@ -103,7 +100,7 @@ test_that("load concepts", {
 
   expect_type(dat5, "list")
   expect_length(dat5, 1L)
-  expect_identical(dat4, dat5[[1L]])
+  expect_identical(dat4, dat5[[1L]], ignore_attr = TRUE)
 
   expect_error(
     load_concepts(gluc, aggregate = "identity", verbose = FALSE)
@@ -129,7 +126,7 @@ test_that("load concepts", {
 
   dat6 <- load_concepts(gluc2, verbose = FALSE)
 
-  expect_identical(dat1, dat6)
+  expect_identical(dat1, dat6, ignore_attr = TRUE)
 
   gcs_con <- load_dictionary(concepts = "gcs")
   gcs_raw <- concept("gcs_raw", gcs_con, set_sed_max = FALSE,

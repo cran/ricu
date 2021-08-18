@@ -8,7 +8,7 @@
     fun_name <- fun_name[3L]
     fun_body <- body(fun)
 
-    if (class(fun_body)[1L] != "{") {
+    if (!inherits(fun_body, "{")) {
       fun_body <- as.call(c(as.name("{"), fun_body))
     }
 
@@ -33,21 +33,24 @@
 
   if (has_length(srcs)) {
     attach_src(srcs, assign_env = pkg_env())
-    namespaceExport(pkg_env(), srcs)
+    namespaceExport(pkg_env(), attached_srcs())
   }
 
   if (base::getRversion() < "4.0.0") {
 
-    if (missing(pkgname)) prefix <- ""
-    else                  prefix <- paste0(methods::getPackageName(), "::")
+    if (missing(pkgname)) {
+      prefix <- ""
+    } else {
+      prefix <- paste0(methods::getPackageName(), "::")
+    }
 
     cbind_fix <- paste0(
       "if (!identical(class(..1), 'data.frame')) for (x in list(...)) { ",
-      "if (inherits(x, 'id_tbl')) return(", prefix, ".cbind.id_tbl(...)) }"
+      "if (inherits(x, 'id_tbl')) return(", prefix, "cbind_id_tbl(...)) }"
     )
 
     rbind_fix <- paste0("for (x in list(...)) { ",
-      "if (inherits(x, 'id_tbl')) return(", prefix, ".rbind.id_tbl(...)) }")
+      "if (inherits(x, 'id_tbl')) return(", prefix, "rbind_id_tbl(...)) }")
 
     fix_base_fun(base::cbind.data.frame, cbind_fix)
     fix_base_fun(base::rbind.data.frame, rbind_fix)
@@ -104,4 +107,4 @@
   detach_src(attached_srcs())
 } # nocov end
 
-.datatable.aware = TRUE
+.datatable.aware <- TRUE

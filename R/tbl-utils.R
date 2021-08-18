@@ -29,9 +29,14 @@
 #'   with the given designation. As a `ts_tbl` object is required to have
 #'   exactly one column marked as index, this function always returns for
 #'   `ts_tbl` objects (and fails for `id_tbl` objects).
+#' * `dur_var()`: For `win_tbl` objects, this returns the name of the column
+#'   encoding the data validity interval.
+#' * `dur_col()`: Similarly to `index_col()`, this returns the `difftime`
+#'   vector corresponding to the `dur_var()`.
 #' * `meta_vars()`: For `ts_tbl` objects, meta variables represent the union
-#'   of ID and index variables, while for `id_tbl` objects meta variables
-#'   consist pf ID variables.
+#'   of ID and index variables (for `win_tbl`, this also includes the
+#'   `dur_var()`), while for `id_tbl` objects meta variables consist pf ID
+#'   variables.
 #' * `data_vars()`: Data variables on the other hand are all columns that are
 #'   not meta variables.
 #' * `data_var()`: Similarly to `id_var()`, this function either returns the
@@ -42,7 +47,8 @@
 #' * `time_vars()`: Time variables are all columns in an object inheriting
 #'   from [`data.frame`][base::data.frame()] that are of type
 #'   [`difftime`][base::difftime()]. Therefore in a `ts_tbl` object the index
-#'   column is one of (potentially) several time variables.
+#'   column is one of (potentially) several time variables. For a `win_tbl`,
+#'   however the `dur_var()` is not among the `time_vars()`.
 #' * `interval()`: The time series interval length is represented a scalar
 #'   valued [`difftime`][base::difftime()] object.
 #' * `time_unit()`: The time unit of the time series interval, represented by
@@ -119,6 +125,24 @@ index_col <- function(x) x[[index_var(x)]]
 
 #' @rdname tbl_meta
 #' @export
+dur_var <- function(x) UseMethod("dur_var", x)
+
+#' @export
+dur_var.win_tbl <- function(x) attr(x, "dur_var")
+
+#' @export
+dur_var.default <- function(x) stop_generic(x, .Generic)
+
+#' @rdname tbl_meta
+#' @export
+dur_col <- function(x) x[[dur_var(x)]]
+
+#' @rdname tbl_meta
+#' @export
+dur_unit <- function(x) units(dur_col(x))
+
+#' @rdname tbl_meta
+#' @export
 meta_vars <- function(x) UseMethod("meta_vars", x)
 
 #' @export
@@ -126,6 +150,9 @@ meta_vars.id_tbl <- function(x) id_vars(x)
 
 #' @export
 meta_vars.ts_tbl <- function(x) c(id_vars(x), index_var(x))
+
+#' @export
+meta_vars.win_tbl <- function(x) c(id_vars(x), index_var(x), dur_var(x))
 
 #' @export
 meta_vars.default <- function(x) stop_generic(x, .Generic)
@@ -182,6 +209,9 @@ time_vars <- function(x) UseMethod("time_vars", x)
 #' @method time_vars data.frame
 #' @export
 time_vars.data.frame <- function(x) colnames(x)[lgl_ply(x, is_difftime)]
+
+#' @export
+time_vars.win_tbl <- function(x) setdiff(NextMethod(), dur_var(x))
 
 #' @export
 time_vars.default <- function(x) stop_generic(x, .Generic)
@@ -286,8 +316,8 @@ is_prt <- is_type("prt")
 #' @param ... In case a function is passed as `new`, further arguments are
 #' forwarded to that function
 #'
-#' @return Most of the utility functions return either an `id_tbl` or a
-#' `ts_tbl`, potentially modified by reference, depending on the type of the
+#' @return Most of the utility functions return an object inheriting from
+#' `id_tbl`, potentially modified by reference, depending on the type of the
 #' object passed as `x`. The functions `is_sorted()`, `anyDuplicated()` and
 #' `is_unique()` return logical flags, while `duplicated()` returns a logical
 #' vector of the length `nrow(x)`.
@@ -324,6 +354,28 @@ col_renamer <- function(x, new, old = colnames(x), skip_absent = FALSE,
                         by_ref = FALSE) {
 
   UseMethod("col_renamer", x)
+}
+
+#' @keywords internal
+#' @export
+col_renamer.win_tbl <- function(x, new, old = colnames(x),
+                                skip_absent = FALSE, by_ref = FALSE) {
+
+  old_dur <- dur_var(x)
+
+  if (old_dur %in% old) {
+
+    new_dur <- new[old %in% old_dur]
+
+    if (!by_ref) {
+      x <- copy(x)
+      by_ref <- TRUE
+    }
+
+    x <- set_attributes(x, dur_var = unname(new_dur))
+  }
+
+  col_renamer.ts_tbl(x, new, old, skip_absent, by_ref)
 }
 
 #' @keywords internal
@@ -500,6 +552,24 @@ change_interval.data.table <- function(x, new_interval, cols = time_vars(x),
 #' @export
 change_interval.default <- function(x, ...) stop_generic(x, .Generic)
 
+#' @param new_unit New `difftime` unit for the `dur_var` column
+#' @rdname tbl_utils
+#' @export
+change_dur_unit <- function(x, new_unit, by_ref = FALSE) {
+
+  assert_that(is_win_tbl(x), is.string(new_unit), is.flag(by_ref))
+
+  dura_var <- dur_var(x)
+
+  if (by_ref) {
+    x <- x[, c(dura_var) := `units<-`(get(dura_var), new_unit)]
+  } else {
+    x[[dura_var]] <- `units<-`(dur_col(x), new_unit)
+  }
+
+  x
+}
+
 #' @param cols Column names of columns to consider
 #' @param mode Switch between `all` where all entries of a row have to be
 #' missing (for the selected columns) or `any`, where a single missing entry
@@ -667,7 +737,7 @@ aggregate.id_tbl <- function(x, expr = NULL, by = meta_vars(x),
     how <- get(as.character(substitute(expr)), envir = env)
   }
 
-  if (is.null(how)) {
+  if (is.null(how) || isTRUE(how)) {
 
     if (all(lgl_ply(vars, is_type, is.numeric, is_difftime))) {
 
@@ -675,7 +745,7 @@ aggregate.id_tbl <- function(x, expr = NULL, by = meta_vars(x),
 
     } else if (all(lgl_ply(vars, is_type, is.logical))) {
 
-      fun <- "sum"
+      fun <- "any"
 
     } else if (all(lgl_ply(vars, is_type, is.character))) {
 
@@ -713,9 +783,13 @@ aggregate.id_tbl <- function(x, expr = NULL, by = meta_vars(x),
 #'
 dt_gforce <- function(x,
                       fun = c("mean", "median", "min", "max", "sum", "prod",
-                              "var", "sd", "first", "last"),
+                              "var", "sd", "first", "last", "any", "all"),
                       by = meta_vars(x), vars = data_vars(x),
                       na_rm = !fun %in% c("first", "last")) {
+
+  col_is_lgl <- function(col, tbl) is.logical(tbl[[col]])
+
+  .N <- NULL
 
   if (getOption("datatable.optimize") < 2L) {
     warn_ricu("the setting `datatable.optimize` prevents GForce optimizations
@@ -730,6 +804,10 @@ dt_gforce <- function(x,
 
   assert_that(is.flag(na_rm), all(c(vars, by) %in% colnames(x)))
 
+  if (fun %in% c("any", "all")) {
+    assert_that(lgl_ply(vars, col_is_lgl, x), !"N" %in% c(by, vars))
+  }
+
   switch(fun,
     mean   = x[, lapply(.SD, mean, na.rm = na_rm),   by = by, .SDcols = vars],
     median = x[, lapply(.SD, median, na.rm = na_rm), by = by, .SDcols = vars],
@@ -740,7 +818,18 @@ dt_gforce <- function(x,
     var    = x[, lapply(.SD, var, na.rm = na_rm),    by = by, .SDcols = vars],
     sd     = x[, lapply(.SD, sd, na.rm = na_rm),     by = by, .SDcols = vars],
     first  = x[, first(.SD),                         by = by, .SDcols = vars],
-    last   = x[, last(.SD),                          by = by, .SDcols = vars]
+    last   = x[, last(.SD),                          by = by, .SDcols = vars],
+    any = {
+      x <- x[, lapply(.SD, sum, na.rm = na_rm), by = by, .SDcols = vars]
+      x <- x[, c(vars) := lapply(.SD, as.logical), .SDcols = vars]
+      x
+    },
+    all = {
+      x <- x[, c(lapply(.SD, sum, na.rm = na_rm), .N), by = by, .SDcols = vars]
+      x <- x[, c(vars) := lapply(.SD, `==`, get("N")), .SDcols = vars]
+      x <- x[, c("N") := NULL]
+      x
+    }
   )
 }
 

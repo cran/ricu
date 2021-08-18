@@ -31,7 +31,14 @@
 #' repeated. The inverse operation is available as `collapse()`, which groups
 #' by `id_vars`, represents `index_var` as group-wise extrema in two new
 #' columns `start_var` and `end_var` and allows for further data summary using
-#' `...`.
+#' `...`. An aspect to keep in mind when applying `expand()` to a `win_tbl`
+#' object is that values simply are repeated for all time-steps that fall into
+#' a given validity interval. This gives correct results when a `win_tbl` for
+#' example contains data on infusions as rates, but might not lead to correct
+#' results when infusions are represented as drug amounts administered over a
+#' given time-span. In such a scenario it might be desirable to evenly
+#' distribute the total amount over the corresponding time steps (currently not
+#' implemented).
 #'
 #' Sliding-window type operations are available as `slide()`, `slide_index()`
 #' and `hop()` (function naming is inspired by the CRAN package `slider`). The
@@ -51,6 +58,7 @@
 #' `start_var` and `end_var`
 #' @param new_index Name of the new index column
 #' @param keep_vars Names of the columns to hold onto
+#' @param aggregate Function for aggregating values in overlapping intervals
 #'
 #' @return Most functions return `ts_tbl` objects with the exception of
 #' `has_gaps()`/`has_no_gaps()`/`is_regular()`, which return logical flags.
@@ -85,8 +93,9 @@
 #' @rdname ts_utils
 #' @export
 #'
-expand <- function(x, start_var = "start", end_var = "end", step_size = NULL,
-                   new_index = NULL, keep_vars = id_vars(x)) {
+expand <- function(x, start_var = index_var(x), end_var = NULL,
+                   step_size = time_step(x), new_index = start_var,
+                   keep_vars = NULL, aggregate = FALSE) {
 
   do_seq <- function(min, max) seq(min, max, step_size)
 
@@ -97,35 +106,56 @@ expand <- function(x, start_var = "start", end_var = "end", step_size = NULL,
         value = as.difftime(unlist(lst), units = unit))
   }
 
-  assert_that(
-    is_dt(x), has_time_cols(x, c(start_var, end_var), 2L),
-    same_unit(x[[start_var]], x[[end_var]])
-  )
+  assert_that(is_dt(x), is.string(new_index), is_scalar(step_size),
+              is.numeric(step_size))
 
   if (identical(nrow(x), 0L)) {
     return(x)
   }
 
-  step_size <- coalesce(step_size, time_step(x))
-  new_index <- coalesce(new_index, index_var(x))
+  start_var <- coalesce(start_var, if (is_ts_tbl(x)) index_var(x), "start")
+  end_var   <- coalesce(end_var, if (is_win_tbl(x)) new_names(x), "end")
+  time_unit <- units(x[[start_var]])
+  interval  <- as.difftime(step_size, units = time_unit)
 
-  assert_that(is.string(new_index), is_scalar(step_size),
-              is.numeric(step_size))
+  if (is_win_tbl(x) && !end_var %in% colnames(x)) {
 
-  unit <- units(x[[start_var]])
+    on.exit(rm_cols(x, end_var, by_ref = TRUE))
 
-  x <- rm_na(x, c(start_var, end_var), "any")
-  x <- x[get(start_var) <= get(end_var), ]
+    dura_var <- dur_var(x)
+    data_var <- data_vars(x)
 
-  res <- x[, c(keep_vars, start_var, end_var), with = FALSE]
+    x <- x[, c(end_var) := re_time(get(start_var) + get(dura_var), interval)]
+    x <- x[get(end_var) < 0, c(end_var) := as.difftime(0, units = time_unit)]
+  }
+
+  assert_that(has_time_cols(x, c(start_var, end_var), 2L),
+              same_unit(x[[start_var]], x[[end_var]]))
+
+  if (is.null(keep_vars)) {
+    keep_vars <- id_vars(x)
+    if (is_win_tbl(x)) {
+      keep_vars <- c(keep_vars, data_var)
+    }
+  }
+
+  res <- rm_na(x, c(start_var, end_var), "any")
+  res <- res[get(start_var) <= get(end_var), c(keep_vars, start_var, end_var),
+             with = FALSE]
   res <- res[, c(start_var, end_var) := lapply(.SD, as.double),
              .SDcols = c(start_var, end_var)]
 
-  res <- res[, seq_expand(get(start_var), get(end_var), unit, .SD),
+  res <- res[, seq_expand(get(start_var), get(end_var), time_unit, .SD),
              .SDcols = keep_vars]
 
-  as_ts_tbl(res, index_var = new_index,
-            interval = as.difftime(step_size, units = unit), by_ref = TRUE)
+  res <- as_ts_tbl(res, index_var = new_index, interval = interval,
+                   by_ref = TRUE)
+
+  if (!isFALSE(aggregate)) {
+    res <- stats::aggregate(res, aggregate)
+  }
+
+  res
 }
 
 #' @param id_vars,index_var ID and index variables
@@ -255,8 +285,8 @@ remove_gaps <- function(x) rm_na(x, data_vars(x), "all")
 #'
 slide <- function(x, expr, before, after = hours(0L), ...) {
 
-  assert_that(is_scalar(before), is_interval(before),
-              is_scalar(after), is_interval(after))
+  assert_that(is_scalar(before), is_difftime(before),
+              is_scalar(after), is_difftime(after))
 
   id_cols <- id_vars(x)
   ind_col <- index_var(x)
@@ -302,8 +332,8 @@ slide <- function(x, expr, before, after = hours(0L), ...) {
 slide_index <- function(x, expr, index, before, after = hours(0L), ...) {
 
   assert_that(is_difftime(index), has_length(index), is_unique(index),
-              is_scalar(before), is_interval(before),
-              is_scalar(after),  is_interval(after))
+              is_scalar(before), is_difftime(before),
+              is_scalar(after),  is_difftime(after))
 
   id_cols <- id_vars(x)
   ind_col <- index_var(x)
@@ -428,7 +458,7 @@ hopper <- function(x, expr, windows, full_window = FALSE,
   rename_cols(res, win_cols, tmp_col, by_ref = TRUE)
 }
 
-#' Difftime utilities
+#' Utilities for `difftime`
 #'
 #' As [base::difftime()] vectors are used throughout `ricu`, a set of wrapper
 #' functions are exported for convenience of instantiation [base::difftime()]
@@ -530,6 +560,10 @@ group_measurements <- function(x, max_gap = hours(6L), group_var = "grp_var") {
 
   grp_calc  <- function(x) {
 
+    if (length(x) == 0L) {
+      return(integer())
+    }
+
     tmp <- rle(x <= max_gap)
 
     val <- tmp[["values"]]
@@ -594,4 +628,16 @@ create_intervals <- function(x, by_vars = id_vars(x), overhang = hours(1L),
   x <- x[, c(end_var) := get(idx_var) + get(end_var)]
 
   x
+}
+
+min_time_unit <- function(x) {
+
+  assert_that(is.character(x))
+
+  if (any(x == "secs")) "secs"
+  else if (any(x == "mins")) "mins"
+  else if (any(x == "hours")) "hours"
+  else if (any(x == "days")) "days"
+  else if (any(x == "weeks")) "weeks"
+  else stop_ricu("unknown time units", class = "unknown_time_unit")
 }

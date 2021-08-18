@@ -73,6 +73,8 @@
 #' @param src The data source name
 #' @param ... Further specification of the `itm` object (passed to
 #' [init_itm()])
+#' @param interval A default data loading interval (either specified as scalar
+#' `difftime` or string such as "00:01:00")
 #' @param target Item target class (e.g. "id_tbl"), `NA` indicates no specific
 #' class requirement
 #' @param class Sub class for customizing `itm` behavior
@@ -111,12 +113,18 @@
 #'
 #' @export
 #'
-new_itm <- function(src, ..., target = NA_character_, class = "sel_itm") {
+new_itm <- function(src, ..., interval = NULL, target = NA_character_,
+                    class = "sel_itm") {
 
   assert_that(is.string(src), is.character(class), has_length(class))
 
-  init_itm(structure(list(src = src, target = target),
-           class = c(class, "itm")), ...)
+  res <- structure(list(src = src, target = target), class = c(class, "itm"))
+
+  if (not_null(interval)) {
+    res[["interval"]] <- as.difftime(interval)
+  }
+
+  init_itm(res, ...)
 }
 
 #' @param x Object to query/dispatch on
@@ -194,7 +202,7 @@ init_itm.hrd_itm <- function(x, table, sub_var, ids,
 #'
 #' @rdname data_items
 #' @export
-init_itm.col_itm <- function(x, table, sub_var, unit_val = NULL,
+init_itm.col_itm <- function(x, table, unit_val = NULL,
                              callback = "identity_callback", ...) {
 
   assert_that(is.string(table), null_or(unit_val, is.string))
@@ -222,16 +230,18 @@ init_itm.rgx_itm <- function(x, table, sub_var, regex,
 }
 
 complete_tbl_itm <- function(x, callback, sub_var, id_var = NULL,
-                             index_var = NULL, ...) {
+                             index_var = NULL, dur_var = NULL,
+                             time_vars = NULL, ...) {
 
   res <- set_callback(x, callback)
   res <- try_add_vars(res, sub_var = sub_var, ...)
   res <- try_add_vars(res, val_var = TRUE)
+  res <- try_add_vars(res, id_var = id_var, index_var = index_var,
+                      dur_var = dur_var, type = "meta_vars")
 
-  tbl <- as_src_tbl(x)
-
-  res[["id_var"]]    <- coalesce(id_var,    id_var(tbl))
-  res[["index_var"]] <- coalesce(index_var, index_var(tbl))
+  if (not_null(time_vars)) {
+    res[["time_vars"]] <- time_vars
+  }
 
   res
 }
@@ -258,6 +268,13 @@ init_itm.itm <- function(x, ...) {
 
 #' @export
 init_itm.default <- function(x, ...) stop_generic(x, .Generic)
+
+#' @export
+print.itm <- function(x, ...) {
+  cat_line(
+    paste0("<", class(x)[1L], "[", src_name(x), ", ", get_target(x), "]>")
+  )
+}
 
 #' Internal utilities for `item`/`concept` objects
 #'
@@ -327,13 +344,16 @@ prepare_query.col_itm <- function(x) rlang::quo(NULL)
 prepare_query.default <- function(x) stop_generic(x, .Generic)
 
 #' @param ... Variable specification
+#' @param var_lst List-based variable specification
+#' @param type Variable type (either data or meta)
 #'
 #' @rdname item_utils
 #' @keywords internal
 #' @export
-try_add_vars <- function(x, ...) {
+try_add_vars <- function(x, ..., var_lst = NULL,
+                         type = c("data_vars", "meta_vars")) {
 
-  if (...length() == 0L) {
+  if (...length() + length(var_lst) == 0L) {
     return(x)
   }
 
@@ -342,9 +362,11 @@ try_add_vars <- function(x, ...) {
 
 #' @keywords internal
 #' @export
-try_add_vars.itm <- function(x, ...) {
+try_add_vars.itm <- function(x, ..., var_lst = NULL,
+                             type = c("data_vars", "meta_vars")) {
 
-  vars <- list(...)
+  type <- match.arg(type)
+  vars <- c(list(...), var_lst)
   nmes <- names(vars)
 
   assert_that(same_length(nmes, vars), is_unique(nmes))
@@ -352,10 +374,11 @@ try_add_vars.itm <- function(x, ...) {
   for (var in nmes) {
 
     cur <- vars[[var]]
+    tmp <- get_itm_var(x, type = type)
 
     if (isFALSE(cur)) {
 
-      x[["vars"]] <- x[["vars"]][setdiff(names(x[["vars"]]), cur)]
+      x[[type]] <- tmp[setdiff(names(tmp), cur)]
 
     } else {
 
@@ -368,20 +391,25 @@ try_add_vars.itm <- function(x, ...) {
         cur <- default_vars(as_src_tbl(x), var)
       }
 
-      old <- if (has_name(x[["vars"]], var)) x[["vars"]][[var]] else NULL
-      cur <- coalesce(old, cur)
+      cur <- coalesce(if (has_name(tmp, var)) tmp[[var]], cur)
 
-      if (is.null(cur)) next
+      if (is.null(cur)) {
+        next
+      }
 
       assert_that(is.string(cur))
 
-      x[["vars"]][[var]] <- cur
+      x[[type]][[var]] <- cur
     }
   }
 
-  if (has_length(x[["vars"]])) {
-    assert_that(is_unique(unlist(x[["vars"]])))
-    x[["vars"]] <- x[["vars"]][order(names(x[["vars"]]))]
+  tmp <- get_itm_var(x, type = type)
+
+  if (has_length(tmp)) {
+
+    assert_that(is_unique(unlist(tmp)))
+
+    x[[type]] <- tmp[order(names(tmp))]
   }
 
   x
@@ -416,31 +444,29 @@ try_add_vars.rec_cncpt <- function(x, ...) x
 #' @export
 try_add_vars.default <- function(x, ...) stop_generic(x, .Generic)
 
-#' @param ... Variable name
-#'
+#' @param var Variable name (`NULL`) returns all available
 #' @rdname item_utils
 #' @keywords internal
 #' @export
-get_itm_var <- function(x, var = NULL) UseMethod("get_itm_var", x)
+get_itm_var <- function(x, var = NULL, type = c("data_vars", "meta_vars")) {
+  UseMethod("get_itm_var", x)
+}
 
 #' @keywords internal
 #' @export
-get_itm_var.itm <- function(x, var = NULL) {
+get_itm_var.itm <- function(x, var = NULL, type = c("data_vars", "meta_vars")) {
 
-  res <- x[["vars"]]
+  res <- x[[match.arg(type)]]
 
   if (is.null(var)) {
-
-    res
-
-  } else {
-
-    if (has_name(res, var)) {
-      res[[var]]
-    } else {
-      NULL
-    }
+    return(res)
   }
+
+  if (has_name(res, var)) {
+    return(res[[var]])
+  }
+
+  NULL
 }
 
 #' @export
@@ -492,8 +518,9 @@ do_callback <- function(x, ...) UseMethod("do_callback", x)
 do_callback.itm <- function(x, ...) {
 
   fun <- str_to_fun(x[["callback"]])
-  var <- x[["vars"]]
   env <- as_src_env(x)
+  var <- c(get_itm_var(x, type = "meta_vars"),
+           get_itm_var(x, type = "data_vars"))
 
   (function(x) {
 
@@ -553,10 +580,13 @@ do_itm_load <- function(x, id_type = "icustay", interval = hours(1L)) {
 do_itm_load.itm <- function(x, id_type = "icustay", interval = hours(1L)) {
 
   trg <- get_target(x)
-  fun <- switch(trg, id_tbl = load_id, ts_tbl = load_ts,
+  fun <- switch(trg, id_tbl = load_id, ts_tbl = load_ts, win_tbl = load_win,
                 stop_ricu("Cannot load object with target class {trg}"))
 
-  fun(x, id_var = id_var(as_id_cfg(x)[id_type]), interval = interval)
+  idv <- id_var(as_id_cfg(x)[id_type])
+  ivl <- coalesce(interval(x), interval)
+
+  fun(x, id_var = idv, interval = ivl)
 }
 
 #' @export
@@ -598,19 +628,27 @@ do_itm_load.fun_itm <- function(x, id_type = "icustay", interval = hours(1L)) {
 do_itm_load.nul_itm <- function(x, id_type = "icustay", interval = hours(1L)) {
 
   idc <- id_type_to_name(x, id_type)
-  xtr <- new_names(idc)
-
-  res <- id_origin(x, id_type_to_name(x, id_type), origin_name = xtr,
-                   copy = FALSE)
+  res <- id_map(x, idc, idc)
   res <- res[0L, ]
-  res <- res[, c("val_var", xtr) := list(numeric(0L), NULL)]
+  res <- res[, c("val_var") := numeric(0L)]
 
-  if (identical(get_target(x), "ts_tbl")) {
+  if (target_inherits(x, "ts_tbl")) {
+
     res <- res[, c("index_var") := interval[0L]]
     res <- as_ts_tbl(res, interval = interval, by_ref = TRUE)
+
+    if (target_inherits(x, "win_tbl")) {
+      res <- res[, c("dur_var") := mins(integer())]
+      res <- as_win_tbl(res, dur_var = "dur_var", by_ref = TRUE)
+    }
   }
 
   res
+}
+
+target_inherits <- function(x, class) {
+  opts <- c("id_tbl", "ts_tbl", "win_tbl")
+  class %in% opts[seq_len(match(get_target(x), opts))]
 }
 
 #' @export
@@ -618,19 +656,36 @@ do_itm_load.default <- function(x, ...) stop_generic(x, .Generic)
 
 #' @export
 id_vars.itm <- function(x) {
-  coalesce(x[["id_var"]], id_vars(as_src_tbl(x)))
+  coalesce(get_itm_var(x, "id_var", "meta_vars"), id_vars(as_src_tbl(x)))
 }
 
 #' @export
 index_var.itm <- function(x) {
-  coalesce(x[["index_var"]], index_var(as_src_tbl(x)))
+  coalesce(get_itm_var(x, "index_var", "meta_vars"), index_var(as_src_tbl(x)))
 }
 
 #' @export
-meta_vars.itm <- function(x) c(id_vars(x), index_var(x))
+time_vars.itm <- function(x) {
+  coalesce(
+    if (has_name(x, "time_vars")) x[["time_vars"]],
+    time_vars(as_src_tbl(x))
+  )
+}
 
 #' @export
-dimnames.itm <- function(x) list(NULL, unlst(x[["vars"]]))
+dur_var.itm <- function(x) get_itm_var(x, "dur_var", "meta_vars")
+
+#' @export
+interval.itm <- function(x) x[["interval"]]
+
+#' @export
+meta_vars.itm <- function(x) c(id_vars(x), index_var(x), dur_var(x))
+
+#' @export
+dimnames.itm <- function(x) {
+  list(NULL, unlst(c(get_itm_var(x, type = "meta_vars"),
+                     get_itm_var(x, type = "data_vars"))))
+}
 
 #' @rdname data_items
 #' @export
@@ -816,6 +871,9 @@ is_target <- function(x, dat) is_type(get_target(x))(dat)
 #'   complicated nature of such concepts, a `callback` function can be
 #'   specified which is used in data loading for concept-specific post-
 #'   processing steps.
+#' * `unt_cncpt`: A recent (experimental) addition which inherits from
+#'   `num_cncpt` but instead of manual unit conversion, leverages
+#    `units::set_units()` in order to automate this.
 #'
 #' Class instantiation is organized in the same fashion as for
 #' [`item`][new_itm()] objects: `concept()` maps vector-valued arguments
@@ -881,7 +939,7 @@ new_cncpt <- function(name, items, description = name,
                       category = NA_character_, aggregate = NULL, ...,
                       target = "ts_tbl", class = "num_cncpt") {
 
-  assert_that(is.string(name), null_or(class, is.string), is.string(target),
+  assert_that(is.string(name), null_or(class, is.character), is.string(target),
               is.string(description), is.string(category))
 
   if (!is_concept(items)) {
@@ -923,6 +981,20 @@ init_cncpt.num_cncpt <- function(x, unit = NULL, min = NULL, max = NULL, ...) {
   x[todo] <- mget(todo)
 
   try_add_vars(x, unit_var = TRUE)
+}
+
+#' @rdname data_concepts
+#' @export
+init_cncpt.unt_cncpt <- function(x, unit = NULL, min = NULL, max = NULL, ...) {
+
+  if (!requireNamespace("units", quietly = TRUE)) {
+    stop_ricu("Initializing (and using) `unt_cncpt` data concepts requires the
+               `units` package.", class = "units_pkg_required")
+  }
+
+  assert_that(is.string(unit))
+
+  NextMethod()
 }
 
 #' @param levels A vector of possible values a categorical concept may take on
@@ -1007,6 +1079,14 @@ init_cncpt.rec_cncpt <- function(x,
 
 #' @export
 init_cncpt.default <- function(x, ...) stop_generic(x, .Generic)
+
+#' @export
+print.cncpt <- function(x, ...) {
+  itm <- x[["items"]]
+  cat_line(paste0("<", class(x)[1L], "[", length(itm), "]>"))
+  vctrs::obj_print_data(itm, ...)
+  invisible(x)
+}
 
 #' @export
 src_name.cncpt <- function(x) src_name(x[["items"]])
@@ -1109,6 +1189,15 @@ src_name.concept <- function(x) lapply(x, src_name)
 
 #' @export
 n_tick.concept <- function(x) sum(int_ply(x, n_tick))
+
+#' @export
+units.num_cncpt <- function(x) x[["unit"]]
+
+#' @export
+min.num_cncpt <- function(x, ...) warn_dot_ident(x[["min"]])
+
+#' @export
+max.num_cncpt <- function(x, ...) warn_dot_ident(x[["max"]])
 
 #' Load concept dictionaries
 #'
@@ -1375,10 +1464,19 @@ concept_availability <- function(dict = NULL, include_rec = FALSE, ...) {
 
     if (inherits(x, "rec_cncpt")) {
 
-      res <- lapply(as_item(x), is_avail)
-      res <- rbind_avail(res)
+      res <- as_item(x)
 
-      apply(res, 2L, all_true)
+      if (is.na(include_rec)) {
+
+        setNames(rep(NA, length = length(res)), names(res))
+
+      } else {
+
+        res <- lapply(res, is_avail)
+        res <- rbind_avail(res)
+
+        apply(res, 2L, all_true)
+      }
 
     } else {
 
@@ -1391,14 +1489,12 @@ concept_availability <- function(dict = NULL, include_rec = FALSE, ...) {
     dict <- load_dictionary(...)
   }
 
-  if (!isTRUE(include_rec)) {
+  if (isFALSE(include_rec)) {
     dict <- dict[lgl_ply(dict, Negate(inherits), "rec_cncpt")]
   }
 
   res <- lapply(dict, is_avail)
   res <- rbind_avail(res)
-
-  res[is.na(res)] <- FALSE
 
   res
 }
