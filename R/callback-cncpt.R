@@ -141,22 +141,20 @@ rename_data_var <- function(new_name, old_name = NULL) {
 #' }{\out{\textsubscript{2}}}{\ifelse{html}{\out{<sub>2</sub>}}{2}} with 21,
 #' the percentage (by volume) of oxygen in (tropospheric) air.
 #'
-#' ## `vent_dur` and `vent_ind`
-#' Building on the atomic concepts `vent_start` and `vent_end`, `vent_dur`
+#' ## `vent_ind`
+#' Building on the atomic concepts `vent_start` and `vent_end`, `vent_ind`
 #' determines time windows during which patients are mechanically ventilated
 #' by combining start and end events that are separated by at most `match_win`
-#' and at least `min_length`. Durations can be converted into an indicator
-#' variable represented by `vent_ind`, where time-points (as determined by
-#' `interval`) that fall into such ventilation windows are set to `TRUE`,
-#' while missingness (`NA`) or `FALSE` indicate no mechanical ventilation.
-#' Currently, no clear distinction between invasive an non-invasive
-#' ventilation is made.
+#' and at least `min_length`. Durations are represented by the `dur_var` column
+#' in the returned `win_tbl` and the `data_var` column simply indicates the
+#' ventilation status with `TRUE` values. Currently, no clear distinction
+#' between invasive an non-invasive ventilation is made.
 #'
-#' ## `sed`
-#' In order to construct an indicator for patient sedation, information from
-#' the two concepts `trach` and `rass` is pooled: A patient is considered
-#' sedated if intubated or has less or equal to -2 on the Richmond
-#' Agitation-Sedation Scale.
+#' ## `sed_gcs`
+#' In order to construct an indicator for patient sedation (used within the
+#' context of `gcs`), information from the two concepts `ett_gcs` and `rass` is
+#' pooled: A patient is considered sedated if intubated or has less or equal to
+#' -2 on the Richmond Agitation-Sedation Scale.
 #'
 #' ## `gcs`
 #' Aggregating components of the Glasgow Coma Scale into a total score
@@ -164,10 +162,12 @@ rename_data_var <- function(new_name, old_name = NULL) {
 #' coinciding availability of an eye (`egcs`), verbal (`vgcs`) and motor
 #' (`mgcs`) score. In order to match values, a last observation carry forward
 #' imputation scheme over the time span specified by `valid_win` is performed.
-#' Furthermore passing `TRUE` as `set_sed_max` will assume maximal points for
-#' time steps where the patient is sedated (as indicated by `sed`) and passing
-#' `TRUE` as `set_na_max` will assume maximal points for missing values (after
-#' matching and potentially applying `set_sed_max`).
+#' Furthermore passing `"max"` as `sed_impute` will assume maximal points for
+#' time steps where the patient is sedated (as indicated by `sed_gcs`), while
+#' passing `"prev"`, will assign the last observed value previous to the
+#' current sedation window and finally passing `FALSE` will in turn use raw
+#' values. Finally, passing `TRUE` as `set_na_max` will assume maximal points
+#' for missing values (after matching and potentially applying `sed_impute`).
 #'
 #' ## `urine24`
 #' Single urine output events are aggregated into a 24 hour moving window sum.
@@ -247,7 +247,9 @@ safi <- function(..., match_win = hours(2L),
 
 match_fio2 <- function(x, match_win, mode, fio2 = NULL) {
 
-  assert_that(is_interval(match_win), match_win > check_interval(x))
+  match_win <- as_interval(match_win)
+
+  assert_that(match_win > check_interval(x))
 
   if (identical(mode, "match_vals")) {
 
@@ -291,7 +293,7 @@ match_fio2 <- function(x, match_win, mode, fio2 = NULL) {
 #' @rdname callback_cncpt
 #' @export
 #'
-vent_dur <- function(..., match_win = hours(6L), min_length = mins(30L),
+vent_ind <- function(..., match_win = hours(6L), min_length = mins(30L),
                      interval = NULL) {
 
   subset_true <- function(x, col) x[is_true(get(col))]
@@ -299,7 +301,7 @@ vent_dur <- function(..., match_win = hours(6L), min_length = mins(30L),
 
   final_int <- interval
 
-  cnc <- c("vent_start", "vent_end")
+  cnc <- c("vent_start", "vent_end", "mech_vent")
   res <- collect_dots(cnc, NULL, ...)
 
   interval <- check_interval(res)
@@ -308,15 +310,33 @@ vent_dur <- function(..., match_win = hours(6L), min_length = mins(30L),
     final_int <- interval
   }
 
+  match_win  <- as_interval(match_win)
+  min_length <- as_interval(min_length)
+
   assert_that(
-    is_interval(final_int), is_interval(match_win), is_interval(min_length),
-    min_length < match_win, interval < min_length
+    is_interval(final_int), min_length < match_win, interval < min_length
   )
+
+  if (has_rows(res[[3L]])) {
+
+    assert_that(nrow(res[[1L]]) == 0L, nrow(res[[2L]]) == 0L)
+
+    res <- res[[3L]][, c("vent_ind", "mech_vent") := list(
+      !is.na(get("mech_vent")), NULL
+    )]
+
+    res <- change_interval(res, final_int, by_ref = TRUE)
+
+    return(res)
+  }
+
+  assert_that(nrow(res[[3L]]) == 0L)
 
   units(match_win) <- units(interval)
   units(min_length) <- units(interval)
 
-  res <- Map(subset_true, res, cnc)
+  cnc <- cnc[-3L]
+  res <- Map(subset_true, res[-3L], cnc)
   var <- "vent_dur"
 
   if (has_rows(res[[2L]])) {
@@ -340,69 +360,78 @@ vent_dur <- function(..., match_win = hours(6L), min_length = mins(30L),
   }
 
   res <- change_interval(res, final_int, by_ref = TRUE)
-
-  aggregate(res, "max")
-}
-
-#' @rdname callback_cncpt
-#' @export
-#'
-vent_ind <- function(..., interval = NULL) {
-
-  cnc <- "vent_dur"
-  res <- collect_dots(cnc, interval, ...)
-  idx <- index_var(res)
-  res <- res[, c(cnc) := get(idx) + get(cnc)]
-
-  res <- expand(res, idx, cnc)
-  res <- unique(res)
+  res <- aggregate(res, "max")
   res <- res[, c("vent_ind") := TRUE]
 
-  res
-}
-
-#' @rdname callback_cncpt
-#' @export
-#'
-sed <- function(..., interval = NULL) {
-
-  cnc <- c("trach", "rass")
-  res <- collect_dots(cnc, interval, ..., merge_dat = TRUE)
-
-  res <- res[, c("sed", cnc) := list(
-    get(cnc[1L]) | get(cnc[2L]) <= -2, NULL, NULL)
-  ]
-
-  res
+  as_win_tbl(res, dur_var = var, by_ref = TRUE)
 }
 
 #' @param valid_win Maximal time window for which a GCS value is valid
 #' if no newer measurement is available
-#' @param set_sed_max Logical flag for considering sedation
+#' @param sed_impute Imputation scheme for values taken when patient was
+#' sedated (i.e. unconscious).
 #' @param set_na_max Logical flag controlling imputation of missing GCS values
 #' with the respective maximum values
 #'
 #' @rdname callback_cncpt
 #' @export
 #'
-gcs <- function(..., valid_win = hours(6L), set_sed_max = TRUE,
+gcs <- function(..., valid_win = hours(6L),
+                sed_impute = c("max", "prev", "none", "verb"),
                 set_na_max = TRUE, interval = NULL) {
 
-  cnc <- c("egcs", "vgcs", "mgcs", "tgcs", "sed")
-  res <- collect_dots(cnc, interval, ..., merge_dat = TRUE)
+  zero_to_na <- function(x) replace(x, x == 0, NA_real_)
 
-  assert_that(is_interval(valid_win), valid_win > check_interval(res),
-              is.flag(set_sed_max), is.flag(set_na_max))
+  sed_impute <- match.arg(sed_impute)
 
-  if (set_sed_max) {
-    res <- res[is_true(get(cnc[5L])), c(cnc[-5L]) := list(4, 5, 6, 15)]
-  }
+  cnc <- c("egcs", "vgcs", "mgcs", "tgcs", "ett_gcs")
+  res <- collect_dots(cnc, interval, ...)
+
+  valid_win <- as_interval(valid_win)
+
+  assert_that(valid_win > check_interval(res), is.flag(set_na_max))
+
+  sed <- res[[cnc[5L]]]
+  res <- reduce(merge, res[cnc[-5L]], all = TRUE)
 
   expr <- substitute(list(egcs = fun(egcs), vgcs = fun(vgcs),
                           mgcs = fun(mgcs), tgcs = fun(tgcs)),
                      list(fun = locf))
 
   res <- slide(res, !!expr, before = valid_win)
+
+  if (identical(sed_impute, "none")) {
+
+    cnc <- cnc[-5L]
+
+  } else {
+
+    sed <- sed[is_true(get(cnc[5L])), ]
+
+    if (is_win_tbl(sed)) {
+      sed <- expand(sed, aggregate = "any")
+    }
+
+    res <- merge(res, sed, all.x = TRUE)
+  }
+
+  if (identical(sed_impute, "max")) {
+
+    res <- res[is_true(get(cnc[5L])), c(cnc[4]) := 15]
+
+  } else if (identical(sed_impute, "verb")) {
+
+    res <- res[is_true(get(cnc[5L])), c(cnc[c(2L, 4L)]) := list(5, NA_real_)]
+
+  } else if (identical(sed_impute, "prev")) {
+
+    idv <- id_vars(res)
+    res <- res[, c(cnc[-5L]) := lapply(.SD, replace_na, 0), .SDcols = cnc[-5L]]
+    res <- res[is_true(get(cnc[5L])), c(cnc[-5L]) := NA_real_]
+    res <- res[, c(cnc[-5L]) := lapply(.SD, replace_na, type = "locf"),
+               .SDcols = cnc[-5L], by = c(idv)]
+    res <- res[, c(cnc[-5L]) := lapply(.SD, zero_to_na), .SDcols = cnc[-5L]]
+  }
 
   if (set_na_max) {
     res <- res[, c(cnc[1L:3L]) := Map(replace_na, .SD, c(4, 5, 6)),
@@ -416,8 +445,8 @@ gcs <- function(..., valid_win = hours(6L), set_sed_max = TRUE,
     res <- res[, c(cnc[4L]) := list(replace_na(get(cnc[4L]), 15))]
   }
 
-  res <- rename_cols(res, "gcs", cnc[4L])
-  res <- rm_cols(res, cnc[1L:3L])
+  res <- rename_cols(res, "gcs", cnc[4L], by_ref = TRUE)
+  res <- rm_cols(res, cnc[-4L], by_ref = TRUE)
 
   res
 }
@@ -442,13 +471,14 @@ urine24 <- function(..., min_win = hours(12L), limits = NULL,
 
   res      <- collect_dots("urine", interval, ...)
   interval <- check_interval(res)
+  min_win  <- as_interval(min_win)
+
+  assert_that(min_win > interval, min_win <= hours(24L))
 
   if (nrow(res) == 0L) {
     res <- rename_cols(res, "urine24", "urine")
     return(res)
   }
-
-  assert_that(is_interval(min_win), min_win > interval, min_win <= hours(24L))
 
   min_steps   <- ceiling(convert_dt(min_win) / as.double(interval))
   step_factor <- convert_dt(hours(24L)) / as.double(interval)
@@ -482,6 +512,8 @@ vaso60 <- function(..., max_gap = mins(5L), interval = NULL) {
   if (is.null(final_int)) {
     final_int <- interval
   }
+
+  max_gap <- as_interval(max_gap)
 
   assert_that(is_interval(final_int))
 
@@ -552,11 +584,15 @@ vaso_ind <- function(..., interval = NULL) {
 #' @export
 supp_o2 <- function(..., interval = NULL) {
 
-  cnc <- c("vent_ind", "fio2")
-  res <- collect_dots(cnc, interval, ..., merge_dat = TRUE)
+  vent_var <- "vent_ind"
+  fio2_var <- "fio2"
 
-  res <- res[, c("supp_o2", "vent_ind", "fio2") := list(
-    get("vent_ind") | get("fio2") > 21, NULL, NULL
+  res <- collect_dots(c(vent_var, fio2_var), interval, ...)
+  res <- merge(res[[fio2_var]], expand(res[[vent_var]], aggregate = "any"),
+               all = TRUE)
+
+  res <- res[, c("supp_o2", vent_var, fio2_var) := list(
+    is_true(get(vent_var) | get(fio2_var) > 21), NULL, NULL
   )]
 
   res

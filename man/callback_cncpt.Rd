@@ -4,9 +4,7 @@
 \name{pafi}
 \alias{pafi}
 \alias{safi}
-\alias{vent_dur}
 \alias{vent_ind}
-\alias{sed}
 \alias{gcs}
 \alias{urine24}
 \alias{vaso60}
@@ -33,16 +31,12 @@ safi(
   interval = NULL
 )
 
-vent_dur(..., match_win = hours(6L), min_length = mins(30L), interval = NULL)
-
-vent_ind(..., interval = NULL)
-
-sed(..., interval = NULL)
+vent_ind(..., match_win = hours(6L), min_length = mins(30L), interval = NULL)
 
 gcs(
   ...,
   valid_win = hours(6L),
-  set_sed_max = TRUE,
+  sed_impute = c("max", "prev", "none", "verb"),
   set_na_max = TRUE,
   interval = NULL
 )
@@ -91,7 +85,8 @@ time}
 \item{valid_win}{Maximal time window for which a GCS value is valid
 if no newer measurement is available}
 
-\item{set_sed_max}{Logical flag for considering sedation}
+\item{sed_impute}{Imputation scheme for values taken when patient was
+sedated (i.e. unconscious).}
 
 \item{set_na_max}{Logical flag controlling imputation of missing GCS values
 with the respective maximum values}
@@ -153,25 +148,23 @@ Finally, \code{fix_na_fio2} imputes all remaining missing FiO\ifelse{latex
 the percentage (by volume) of oxygen in (tropospheric) air.
 }
 
-\subsection{\code{vent_dur} and \code{vent_ind}}{
+\subsection{\code{vent_ind}}{
 
-Building on the atomic concepts \code{vent_start} and \code{vent_end}, \code{vent_dur}
+Building on the atomic concepts \code{vent_start} and \code{vent_end}, \code{vent_ind}
 determines time windows during which patients are mechanically ventilated
 by combining start and end events that are separated by at most \code{match_win}
-and at least \code{min_length}. Durations can be converted into an indicator
-variable represented by \code{vent_ind}, where time-points (as determined by
-\code{interval}) that fall into such ventilation windows are set to \code{TRUE},
-while missingness (\code{NA}) or \code{FALSE} indicate no mechanical ventilation.
-Currently, no clear distinction between invasive an non-invasive
-ventilation is made.
+and at least \code{min_length}. Durations are represented by the \code{dur_var} column
+in the returned \code{win_tbl} and the \code{data_var} column simply indicates the
+ventilation status with \code{TRUE} values. Currently, no clear distinction
+between invasive an non-invasive ventilation is made.
 }
 
-\subsection{\code{sed}}{
+\subsection{\code{sed_gcs}}{
 
-In order to construct an indicator for patient sedation, information from
-the two concepts \code{trach} and \code{rass} is pooled: A patient is considered
-sedated if intubated or has less or equal to -2 on the Richmond
-Agitation-Sedation Scale.
+In order to construct an indicator for patient sedation (used within the
+context of \code{gcs}), information from the two concepts \code{ett_gcs} and \code{rass} is
+pooled: A patient is considered sedated if intubated or has less or equal to
+-2 on the Richmond Agitation-Sedation Scale.
 }
 
 \subsection{\code{gcs}}{
@@ -181,10 +174,12 @@ Aggregating components of the Glasgow Coma Scale into a total score
 coinciding availability of an eye (\code{egcs}), verbal (\code{vgcs}) and motor
 (\code{mgcs}) score. In order to match values, a last observation carry forward
 imputation scheme over the time span specified by \code{valid_win} is performed.
-Furthermore passing \code{TRUE} as \code{set_sed_max} will assume maximal points for
-time steps where the patient is sedated (as indicated by \code{sed}) and passing
-\code{TRUE} as \code{set_na_max} will assume maximal points for missing values (after
-matching and potentially applying \code{set_sed_max}).
+Furthermore passing \code{"max"} as \code{sed_impute} will assume maximal points for
+time steps where the patient is sedated (as indicated by \code{sed_gcs}), while
+passing \code{"prev"}, will assign the last observed value previous to the
+current sedation window and finally passing \code{FALSE} will in turn use raw
+values. Finally, passing \code{TRUE} as \code{set_na_max} will assume maximal points
+for missing values (after matching and potentially applying \code{sed_impute}).
 }
 
 \subsection{\code{urine24}}{

@@ -6,7 +6,7 @@ Description: Focused on (but not exclusive to) data sets hosted on PhysioNet
     functions for running arbitrary queries against available data sets, a
     system for defining clinical concepts and encoding their representations
     in tabular ICU data is presented.
-Version: 0.5.0
+Version: 0.5.1
 Authors@R: c(
     person(given = "Nicolas",
            family = "Bennett",
@@ -39,10 +39,10 @@ Additional_repositories: https://eth-mds.github.io/physionet-demo
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 NeedsCompilation: no
-Packaged: 2021-08-16 09:20:18 UTC; nbennett
+Packaged: 2021-10-06 16:24:16 UTC; nbennett
 Author: Nicolas Bennett [aut, cre],
   Drago Plecko [aut],
   Ida-Fong Ukor [aut]
 Maintainer: Nicolas Bennett <nicolas.bennett@stat.math.ethz.ch>
 Repository: CRAN
-Date/Publication: 2021-08-18 10:00:02 UTC
+Date/Publication: 2021-10-07 07:40:11 UTC

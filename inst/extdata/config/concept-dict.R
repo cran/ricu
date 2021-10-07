@@ -1867,26 +1867,6 @@ cfg <- list(
         list(ids = c("Start", "Continued", "respFlowPtVentData"),
              table = "respiratorycharting", sub_var = "respcharttypecat",
              callback = "transform_fun(set_val(TRUE))")
-      ),
-      hirid = list(
-        list(ids = 15001552L, table = "observations", sub_var = "variableid",
-             callback = "transform_fun(comp_na(`==`, 1))", class = "hrd_itm")
-      ),
-      aumc = list(
-        list(ids = 9328L, sub_var = "itemid", table = "processitems",
-             callback = "transform_fun(set_val(TRUE))")
-      ),
-      miiv = list(
-        list(
-          ids = c(
-            220339L, 223848L, 223849L, 224419L, 224684L, 224685L, 224686L,
-            224687L, 224695L, 224696L, 224697L, 224700L, 224701L, 224702L,
-            224703L, 224704L, 224705L, 224706L, 224707L, 224709L, 224738L,
-            224746L, 224747L, 224750L, 226873L, 227187L
-          ),
-          table = "chartevents", sub_var = "itemid",
-          callback = "transform_fun(set_val(TRUE))"
-        )
       )
     )
   ),
@@ -1909,43 +1889,84 @@ cfg <- list(
         list(ids = c("off", "Off", "Suspended"), table = "respiratorycharting",
              sub_var = "respchartvalue", val_var = "respchartvaluelabel",
              callback = "transform_fun(set_val(TRUE))")
-      ),
-      hirid = list(
-        list(ids = 15001552L, table = "observations", sub_var = "variableid",
-             callback = "transform_fun(comp_na(`>`, 2))", class = "hrd_itm")
-      ),
-      aumc = list(
-        list(ids = 9328L, sub_var = "itemid", index_var = "stop",
-             table = "processitems", callback = "transform_fun(set_val(TRUE))")
-      ),
-      miiv = list(
-        list(ids = c(225468L, 225477L, 227194L), table = "procedureevents",
-             sub_var = "itemid", callback = "transform_fun(set_val(TRUE))"),
-        list(ids = 226732L, table = "chartevents", sub_var = "itemid",
-             callback = "transform_fun(set_val(TRUE))")
       )
     )
   ),
-  trach = list(
-    class = "lgl_cncpt",
-    description = "tracheostomy",
+  mech_vent = list(
+    class = "fct_cncpt",
+    target = "win_tbl",
+    levels = c("invasive", "noninvasive"),
+    description = "mechanical ventilation windows",
     category = "respiratory",
     sources = list(
-      mimic = list(
-        list(ids = c("1.0 ET/Trach", "No Response-ETT"), table = "chartevents",
-             sub_var = "value", callback = "transform_fun(set_val(TRUE))")
+      aumc = list(
+        list(ids = c(9328L, 10740L, 12635L), table = "processitems",
+             sub_var = "itemid", dur_var = "stop",
+             callback = "apply_map(c(`Beademen`              = 'invasive',
+                                     `Beademen non-invasief` = 'noninvasive',
+                                     `Tracheostoma`          = 'invasive'))"
+        )
+      ),
+      miiv = list(
+        list(ids = c(225792L, 225794L), table = "procedureevents",
+             sub_var = "itemid", dur_var = "endtime",
+             callback = "apply_map(c(`225792` = 'invasive',
+                                     `225794` = 'noninvasive'),
+                                   var = 'sub_var')")
       ),
       hirid = list(
         list(ids = 15001552L, table = "observations", sub_var = "variableid",
-             callback = "transform_fun(comp_na(`==`, 2))", class = "hrd_itm")
+             target = "ts_tbl", interval = "00:01:00", class = "hrd_itm",
+             callback = "combine_callbacks(hirid_vent,
+                                           apply_map(c(`1` = 'invasive',
+                                                       `2` = 'invasive',
+                                                       `3` = 'noninvasive',
+                                                       `4` = 'noninvasive',
+                                                       `5` = 'noninvasive',
+                                                       `6` = 'noninvasive')))")
+      )
+    )
+  ),
+  ett_gcs = list(
+    class = "lgl_cncpt",
+    description = "tracheostomy",
+    category = "respiratory",
+    target = "win_tbl",
+    sources = list(
+      mimic = list(
+        list(ids = c("1.0 ET/Trach", "No Response-ETT"), table = "chartevents",
+             sub_var = "value", target = "ts_tbl",
+             callback = "combine_callbacks(
+               transform_fun(set_val(TRUE)),
+               ts_to_win_tbl(mins(1L))
+             )")
+      ),
+      hirid = list(
+        list(class = "fun_itm", callback = "combine_callbacks(
+               fwd_concept('mech_vent'),
+               transform_fun(comp_na(`==`, 'invasive'))
+             )")
       ),
       aumc = list(
         list(ids = 6735L, table = "listitems", sub_var = "itemid",
-             callback = "transform_fun(comp_na(`==`, 'Geïntubeerd'))")
+             target = "ts_tbl", callback = "combine_callbacks(
+               transform_fun(comp_na(`==`, 'Geïntubeerd')),
+               ts_to_win_tbl(mins(1L))
+             )")
       ),
       miiv = list(
         list(ids = "No Response-ETT", table = "chartevents", sub_var = "value",
-             callback = "transform_fun(set_val(TRUE))")
+             target = "ts_tbl", callback = "combine_callbacks(
+               transform_fun(set_val(TRUE)),
+               ts_to_win_tbl(mins(1L))
+             )")
+      ),
+      eicu = list(
+        list(class = "fun_itm", callback = "combine_callbacks(
+               fwd_concept('rass'),
+               transform_fun(comp_na(`<=`, -3)),
+               ts_to_win_tbl(mins(360L))
+             )")
       )
     )
   ),
@@ -2550,19 +2571,13 @@ cfg <- list(
     callback = "safi",
     class = "rec_cncpt"
   ),
-  vent_dur = list(
-    concepts = c("vent_start", "vent_end"),
+  vent_ind = list(
+    concepts = c("vent_start", "vent_end", "mech_vent"),
     description = "ventilation durations",
     category = "respiratory",
     interval = "00:01:00",
-    callback = "vent_dur",
-    class = "rec_cncpt"
-  ),
-  vent_ind = list(
-    concepts = "vent_dur",
-    description = "ventilation indicator",
-    category = "respiratory",
     callback = "vent_ind",
+    target = "win_tbl",
     class = "rec_cncpt"
   ),
   vaso_ind = list(
@@ -2572,19 +2587,11 @@ cfg <- list(
     callback = "vaso_ind",
     class = "rec_cncpt"
   ),
-  sed = list(
-    concepts = c("trach", "rass"),
-    description = "sedation status",
-    category = "neurological",
-    aggregate = c(NA, "min"),
-    callback = "sed",
-    class = "rec_cncpt"
-  ),
   gcs = list(
-    concepts = c("egcs", "mgcs", "vgcs", "tgcs", "sed"),
+    concepts = c("egcs", "mgcs", "vgcs", "tgcs", "ett_gcs"),
     description = "Glasgow coma scale (non-sedated)",
     category = "neurological",
-    aggregate = c("min", "min", "min", "min", NA),
+    aggregate = c("min", "min", "min", "min", "any"),
     callback = "gcs",
     class = "rec_cncpt"
   ),

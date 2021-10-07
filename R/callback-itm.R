@@ -136,7 +136,7 @@ transform_fun <- function(fun, ...) {
 
   dots <- list(...)
 
-  function(x, val_var, ...) {
+  function(x, val_var = data_var(x), ...) {
     set(x, j = val_var, value = do.call(fun, c(list(x[[val_var]]), dots)))
     x
   }
@@ -213,15 +213,21 @@ hirid_death <- function(x, val_var, sub_var, env, ...) {
 
 #' @param map Named atomic vector used for mapping a set of values (the names
 #' of `map`) to a different set (the values of `map`)
+#' @param var Argument which is used to determine the column the mapping is
+#' applied to
 #'
 #' @rdname callback_itm
 #' @export
-apply_map <- function(map) {
+apply_map <- function(map, var = "val_var") {
 
-  assert_that(is.atomic(map), !is.null(names(map)), has_length(map))
+  assert_that(is.atomic(map), !is.null(names(map)), has_length(map),
+              is.string(var))
 
-  function(x, val_var, ...) {
-    set(x, j = val_var, value = map[x[[val_var]]])
+  function(x, ...) {
+    args <- list(...)
+    map_var <- args[[var]]
+    val_var <- args[["val_var"]]
+    set(x, j = val_var, value = unname(map)[match(x[[map_var]], names(map))])
     x
   }
 }
@@ -849,6 +855,8 @@ eicu_dex_med <- function(x, val_var, dur_var, ...) {
   x <- x[, c(val_var, "unit_var") := list(
     get(val_var) / as.double(get(dur_var)) * 5, "ml/min"
   )]
+
+  x
 }
 
 eicu_dex_inf <- function(x, val_var, ...) {
@@ -860,4 +868,40 @@ eicu_dex_inf <- function(x, val_var, ...) {
   )]
 
   as_win_tbl(x, dur_var = "dur_var", by_ref = TRUE)
+}
+
+hirid_vent <- function(x, ...) {
+
+  idx <- index_var(x)
+  idv <- id_vars(x)
+  xtr <- `units<-`(hours(4L), time_unit(x))
+
+  x <- x[, c("dur_var") := padded_capped_diff(get(idx), xtr, hours(12L)),
+         by = c(idv)]
+
+  as_win_tbl(x, dur_var = "dur_var", by_ref = TRUE)
+}
+
+ts_to_win_tbl <- function(win_dur) {
+
+  assert_that(is_interval(win_dur), is.scalar(win_dur))
+
+  function(x, ...) {
+    x <- x[, c("dur_var") := win_dur]
+    as_win_tbl(x, dur_var = "dur_var", by_ref = TRUE)
+  }
+}
+
+fwd_concept <- function(concept) {
+
+  assert_that(is.string(concept))
+
+  function(x, ...) {
+
+    res <- load_concepts(concept, src_name(x), ..., aggregate = FALSE,
+                         verbose = FALSE)
+
+    res <- rename_cols(res, "val_var", data_var(res), by_ref = TRUE)
+    res
+  }
 }

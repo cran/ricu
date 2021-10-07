@@ -2422,6 +2422,68 @@
       ]
     }
   },
+  "ett_gcs": {
+    "class": "lgl_cncpt",
+    "description": "tracheostomy",
+    "category": "respiratory",
+    "target": "win_tbl",
+    "sources": {
+      "aumc": [
+        {
+          "ids": 6735,
+          "table": "listitems",
+          "sub_var": "itemid",
+          "target": "ts_tbl",
+          "callback": "combine_callbacks(\n               transform_fun(comp_na(`==`, 'Geïntubeerd')),\n               ts_to_win_tbl(mins(1L))\n             )"
+        }
+      ],
+      "eicu": [
+        {
+          "class": "fun_itm",
+          "callback": "combine_callbacks(\n               fwd_concept('rass'),\n               transform_fun(comp_na(`<=`, -3)),\n               ts_to_win_tbl(mins(360L))\n             )"
+        }
+      ],
+      "eicu_demo": [
+        {
+          "class": "fun_itm",
+          "callback": "combine_callbacks(\n               fwd_concept('rass'),\n               transform_fun(comp_na(`<=`, -3)),\n               ts_to_win_tbl(mins(360L))\n             )"
+        }
+      ],
+      "hirid": [
+        {
+          "class": "fun_itm",
+          "callback": "combine_callbacks(\n               fwd_concept('mech_vent'),\n               transform_fun(comp_na(`==`, 'invasive'))\n             )"
+        }
+      ],
+      "miiv": [
+        {
+          "ids": "No Response-ETT",
+          "table": "chartevents",
+          "sub_var": "value",
+          "target": "ts_tbl",
+          "callback": "combine_callbacks(\n               transform_fun(set_val(TRUE)),\n               ts_to_win_tbl(mins(1L))\n             )"
+        }
+      ],
+      "mimic": [
+        {
+          "ids": ["1.0 ET/Trach", "No Response-ETT"],
+          "table": "chartevents",
+          "sub_var": "value",
+          "target": "ts_tbl",
+          "callback": "combine_callbacks(\n               transform_fun(set_val(TRUE)),\n               ts_to_win_tbl(mins(1L))\n             )"
+        }
+      ],
+      "mimic_demo": [
+        {
+          "ids": ["1.0 ET/Trach", "No Response-ETT"],
+          "table": "chartevents",
+          "sub_var": "value",
+          "target": "ts_tbl",
+          "callback": "combine_callbacks(\n               transform_fun(set_val(TRUE)),\n               ts_to_win_tbl(mins(1L))\n             )"
+        }
+      ]
+    }
+  },
   "fgn": {
     "unit": "mg/dL",
     "min": 0,
@@ -2572,10 +2634,10 @@
     }
   },
   "gcs": {
-    "concepts": ["egcs", "mgcs", "vgcs", "tgcs", "sed"],
+    "concepts": ["egcs", "mgcs", "vgcs", "tgcs", "ett_gcs"],
     "description": "Glasgow coma scale (non-sedated)",
     "category": "neurological",
-    "aggregate": ["min", "min", "min", "min", null],
+    "aggregate": ["min", "min", "min", "min", "any"],
     "callback": "gcs",
     "class": "rec_cncpt"
   },
@@ -3621,6 +3683,44 @@
           "ids": 51250,
           "table": "labevents",
           "sub_var": "itemid"
+        }
+      ]
+    }
+  },
+  "mech_vent": {
+    "class": "fct_cncpt",
+    "target": "win_tbl",
+    "levels": ["invasive", "noninvasive"],
+    "description": "mechanical ventilation windows",
+    "category": "respiratory",
+    "sources": {
+      "aumc": [
+        {
+          "ids": [9328, 10740, 12635],
+          "table": "processitems",
+          "sub_var": "itemid",
+          "dur_var": "stop",
+          "callback": "apply_map(c(`Beademen`              = 'invasive',\n                                     `Beademen non-invasief` = 'noninvasive',\n                                     `Tracheostoma`          = 'invasive'))"
+        }
+      ],
+      "hirid": [
+        {
+          "ids": 15001552,
+          "table": "observations",
+          "sub_var": "variableid",
+          "target": "ts_tbl",
+          "interval": "00:01:00",
+          "class": "hrd_itm",
+          "callback": "combine_callbacks(hirid_vent,\n                                           apply_map(c(`1` = 'invasive',\n                                                       `2` = 'invasive',\n                                                       `3` = 'noninvasive',\n                                                       `4` = 'noninvasive',\n                                                       `5` = 'noninvasive',\n                                                       `6` = 'noninvasive')))"
+        }
+      ],
+      "miiv": [
+        {
+          "ids": [225792, 225794],
+          "table": "procedureevents",
+          "sub_var": "itemid",
+          "dur_var": "endtime",
+          "callback": "apply_map(c(`225792` = 'invasive',\n                                     `225794` = 'noninvasive'),\n                                   var = 'sub_var')"
         }
       ]
     }
@@ -5067,14 +5167,6 @@
       ]
     }
   },
-  "sed": {
-    "concepts": ["trach", "rass"],
-    "description": "sedation status",
-    "category": "neurological",
-    "aggregate": [null, "min"],
-    "callback": "sed",
-    "class": "rec_cncpt"
-  },
   "sep3": {
     "concepts": ["sofa", "susp_inf"],
     "description": "sepsis-3 criterion",
@@ -5445,54 +5537,6 @@
       ]
     }
   },
-  "trach": {
-    "class": "lgl_cncpt",
-    "description": "tracheostomy",
-    "category": "respiratory",
-    "sources": {
-      "aumc": [
-        {
-          "ids": 6735,
-          "table": "listitems",
-          "sub_var": "itemid",
-          "callback": "transform_fun(comp_na(`==`, 'Geïntubeerd'))"
-        }
-      ],
-      "hirid": [
-        {
-          "ids": 15001552,
-          "table": "observations",
-          "sub_var": "variableid",
-          "callback": "transform_fun(comp_na(`==`, 2))",
-          "class": "hrd_itm"
-        }
-      ],
-      "miiv": [
-        {
-          "ids": "No Response-ETT",
-          "table": "chartevents",
-          "sub_var": "value",
-          "callback": "transform_fun(set_val(TRUE))"
-        }
-      ],
-      "mimic": [
-        {
-          "ids": ["1.0 ET/Trach", "No Response-ETT"],
-          "table": "chartevents",
-          "sub_var": "value",
-          "callback": "transform_fun(set_val(TRUE))"
-        }
-      ],
-      "mimic_demo": [
-        {
-          "ids": ["1.0 ET/Trach", "No Response-ETT"],
-          "table": "chartevents",
-          "sub_var": "value",
-          "callback": "transform_fun(set_val(TRUE))"
-        }
-      ]
-    }
-  },
   "tri": {
     "unit": "ng/mL",
     "min": 0,
@@ -5623,28 +5667,11 @@
     "callback": "vaso_ind",
     "class": "rec_cncpt"
   },
-  "vent_dur": {
-    "concepts": ["vent_start", "vent_end"],
-    "description": "ventilation durations",
-    "category": "respiratory",
-    "interval": "00:01:00",
-    "callback": "vent_dur",
-    "class": "rec_cncpt"
-  },
   "vent_end": {
     "class": "lgl_cncpt",
     "description": "ventilation end",
     "category": "respiratory",
     "sources": {
-      "aumc": [
-        {
-          "ids": 9328,
-          "sub_var": "itemid",
-          "index_var": "stop",
-          "table": "processitems",
-          "callback": "transform_fun(set_val(TRUE))"
-        }
-      ],
       "eicu": [
         {
           "table": "respiratorycare",
@@ -5684,29 +5711,6 @@
           "table": "respiratorycharting",
           "sub_var": "respchartvalue",
           "val_var": "respchartvaluelabel",
-          "callback": "transform_fun(set_val(TRUE))"
-        }
-      ],
-      "hirid": [
-        {
-          "ids": 15001552,
-          "table": "observations",
-          "sub_var": "variableid",
-          "callback": "transform_fun(comp_na(`>`, 2))",
-          "class": "hrd_itm"
-        }
-      ],
-      "miiv": [
-        {
-          "ids": [225468, 225477, 227194],
-          "table": "procedureevents",
-          "sub_var": "itemid",
-          "callback": "transform_fun(set_val(TRUE))"
-        },
-        {
-          "ids": 226732,
-          "table": "chartevents",
-          "sub_var": "itemid",
           "callback": "transform_fun(set_val(TRUE))"
         }
       ],
@@ -5741,10 +5745,12 @@
     }
   },
   "vent_ind": {
-    "concepts": "vent_dur",
-    "description": "ventilation indicator",
+    "concepts": ["vent_start", "vent_end", "mech_vent"],
+    "description": "ventilation durations",
     "category": "respiratory",
+    "interval": "00:01:00",
     "callback": "vent_ind",
+    "target": "win_tbl",
     "class": "rec_cncpt"
   },
   "vent_start": {
@@ -5752,14 +5758,6 @@
     "description": "ventilation start",
     "category": "respiratory",
     "sources": {
-      "aumc": [
-        {
-          "ids": 9328,
-          "sub_var": "itemid",
-          "table": "processitems",
-          "callback": "transform_fun(set_val(TRUE))"
-        }
-      ],
       "eicu": [
         {
           "table": "respiratorycare",
@@ -5797,23 +5795,6 @@
           "ids": ["Start", "Continued", "respFlowPtVentData"],
           "table": "respiratorycharting",
           "sub_var": "respcharttypecat",
-          "callback": "transform_fun(set_val(TRUE))"
-        }
-      ],
-      "hirid": [
-        {
-          "ids": 15001552,
-          "table": "observations",
-          "sub_var": "variableid",
-          "callback": "transform_fun(comp_na(`==`, 1))",
-          "class": "hrd_itm"
-        }
-      ],
-      "miiv": [
-        {
-          "ids": [220339, 223848, 223849, 224419, 224684, 224685, 224686, 224687, 224695, 224696, 224697, 224700, 224701, 224702, 224703, 224704, 224705, 224706, 224707, 224709, 224738, 224746, 224747, 224750, 226873, 227187],
-          "table": "chartevents",
-          "sub_var": "itemid",
           "callback": "transform_fun(set_val(TRUE))"
         }
       ],

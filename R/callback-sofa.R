@@ -99,6 +99,11 @@ sofa_score <- function(..., worst_val_fun = max_or_na, explicit_wins = FALSE,
            "sofa_cns", "sofa_renal")
   dat <- collect_dots(cnc, interval, ..., merge_dat = TRUE)
 
+  assert_that(not_null(worst_val_fun))
+
+  win_length    <- as_interval(win_length)
+  worst_val_fun <- str_to_fun(worst_val_fun)
+
   expr <- substitute(lapply(.SD, fun), list(fun = worst_val_fun))
 
   if (isFALSE(explicit_wins)) {
@@ -122,8 +127,9 @@ sofa_score <- function(..., worst_val_fun = max_or_na, explicit_wins = FALSE,
 
     } else {
 
-      res <- slide_index(dat, !!expr, explicit_wins, before = win_length,
-                         full_window = FALSE, .SDcols = cnc)
+      res <- slide_index(dat, !!expr, as_interval(explicit_wins, length = NA),
+                         before = win_length, full_window = FALSE,
+                         .SDcols = cnc)
     }
   }
 
@@ -154,12 +160,17 @@ sofa_resp <- function(..., interval = NULL) {
     )
   }
 
-  cnc <- c("pafi", "vent_ind")
-  dat <- collect_dots(cnc, interval, ..., merge_dat = TRUE)
+  vent_var <- "vent_ind"
+  pafi_var <- "pafi"
 
-  dat <- dat[is_true(get("pafi") < 200) & !is_true(get("vent_ind")),
-             c("pafi") := 200]
-  dat <- dat[, c("sofa_resp") := score_calc(get("pafi"))]
+  cnc <- c(pafi_var, vent_var)
+  dat <- collect_dots(cnc, interval, ...)
+  dat <- merge(dat[[pafi_var]], expand(dat[[vent_var]], aggregate = "any"),
+               all = TRUE)
+
+  dat <- dat[is_true(get(pafi_var) < 200) & !is_true(get(vent_var)),
+             c(pafi_var) := 200]
+  dat <- dat[, c("sofa_resp") := score_calc(get(pafi_var))]
 
   dat <- rm_cols(dat, cnc, by_ref = TRUE)
 

@@ -2,8 +2,8 @@
 test_that("load hirid items", {
 
   gluc <- mockthat::with_mock(
-    load_id = id_tbl(id = c(20005110L, 24000523L, 24000585L),
-                     unit = rep("mmol/l", 3L)),
+    get_hirid_ids = id_tbl(id = c(20005110L, 24000523L, 24000585L),
+                           unit = rep("mmol/l", 3L)),
     as_src_tbl = structure(list(),
       class = c("hirid_tbl", "src_tbl"),
       col_cfg = new_col_cfg("hirid", "observations", index_var = "datetime",
@@ -129,7 +129,7 @@ test_that("load concepts", {
   expect_identical(dat1, dat6, ignore_attr = TRUE)
 
   gcs_con <- load_dictionary(concepts = "gcs")
-  gcs_raw <- concept("gcs_raw", gcs_con, set_sed_max = FALSE,
+  gcs_raw <- concept("gcs_raw", gcs_con, sed_impute = "none",
                      class = "rec_cncpt")
 
   dat7 <- load_concepts(gcs_raw, "mimic_demo", verbose = FALSE)
@@ -188,7 +188,7 @@ test_that("load external dictionary", {
   itms <- as_item(dict)
 
   expect_s3_class(itms, "item")
-  expect_length(itms, 23L)
+  expect_length(itms, 21L)
   expect_setequal(names(itms), srcs)
 
   expect_snapshot(print(itms))
