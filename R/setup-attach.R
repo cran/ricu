@@ -138,19 +138,20 @@ attach_src.src_cfg <- function(x, assign_env = NULL,
     }
   })
 
-  invisible(NULL)
-}
+  extra_cfg <- src_extra_cfg(x)
 
-#' @export
-attach_src.aumc_cfg <- function(x, assign_env = NULL,
-                                data_dir = src_data_dir(x), ...) {
+  if (has_name(extra_cfg, "unit_mapping") &&
+      requireNamespace("units", quietly = TRUE)) {
 
-  if (requireNamespace("units", quietly = TRUE)) {
-    units::install_unit("uur", "h")
-    units::install_unit("dag", "d")
+    for (map in extra_cfg[["unit_mapping"]]) {
+
+      tryCatch({
+        units::install_unit(map[["symbol"]], map[["def"]])
+      }, error = function(err) NULL)
+    }
   }
 
-  NextMethod()
+  invisible(NULL)
 }
 
 #' @rdname attach_src
