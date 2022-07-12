@@ -5172,6 +5172,10 @@
     "description": "sepsis-3 criterion",
     "category": "outcome",
     "callback": "sep3",
+    "keep_components": [
+      false,
+      true
+    ],
     "class": "rec_cncpt"
   },
   "sex": {
