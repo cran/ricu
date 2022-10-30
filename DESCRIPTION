@@ -6,7 +6,7 @@ Description: Focused on (but not exclusive to) data sets hosted on PhysioNet
     functions for running arbitrary queries against available data sets, a
     system for defining clinical concepts and encoding their representations
     in tabular ICU data is presented.
-Version: 0.5.3
+Version: 0.5.4
 Authors@R: c(
     person(given = "Nicolas",
            family = "Bennett",
@@ -34,15 +34,15 @@ Suggests: xml2, covr, testthat (>= 3.0.0), withr, mockthat, pkgload,
         mimic.demo, eicu.demo, progress, knitr, rmarkdown, ggplot2,
         cowplot, survival, forestmodel, rticles, kableExtra, units,
         pdftools, magick
-RoxygenNote: 7.2.0
+RoxygenNote: 7.2.1
 Additional_repositories: https://eth-mds.github.io/physionet-demo
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 NeedsCompilation: no
-Packaged: 2022-07-12 08:14:07 UTC; nbennett
+Packaged: 2022-10-30 15:56:56 UTC; nbennett
 Author: Nicolas Bennett [aut, cre],
   Drago Plecko [aut],
   Ida-Fong Ukor [aut]
 Maintainer: Nicolas Bennett <r@nbenn.ch>
 Repository: CRAN
-Date/Publication: 2022-07-12 10:50:14 UTC
+Date/Publication: 2022-10-30 20:54:52 UTC

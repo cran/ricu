@@ -32,7 +32,9 @@ mock_fetch_stream <- function(url, fun, handle, ...) {
   dat
 }
 
-wrong_fun <- mockthat::mock(stop("called wrong fun"))
+if (requireNamespace("mockthat", quietly = TRUE)) {
+  wrong_fun <- mockthat::mock(stop("called wrong fun"))
+}
 
 test_that("credentials", {
 
@@ -46,6 +48,8 @@ test_that("credentials", {
 
   withr::local_envvar(FOO_VAR = NA)
 
+  skip_if_not_installed("mockthat")
+
   res <- mockthat::with_mock(
     is_interactive = function() TRUE,
     read_line = function(...) "baz_val",
@@ -56,6 +60,8 @@ test_that("credentials", {
 })
 
 test_that("file size", {
+
+  skip_if_not_installed("mockthat")
 
   pat_siz <- mockthat::with_mock(
     `curl::curl_fetch_memory` = mock_fetch_memory,
@@ -69,6 +75,8 @@ test_that("file size", {
 })
 
 test_that("hash checking", {
+
+  skip_if_not_installed("mockthat")
 
   sha <- mockthat::with_mock(
     `curl::curl_fetch_memory` = mock_fetch_memory,
@@ -104,6 +112,8 @@ test_that("hash checking", {
 })
 
 test_that("file download", {
+
+  skip_if_not_installed("mockthat")
 
   tmp <- withr::local_tempdir()
 
@@ -170,6 +180,8 @@ test_that("file download", {
 
 test_that("src download", {
 
+  skip_if_not_installed("mockthat")
+
   mock_dl_check <- function(dest_folder, files, url, user, pass, src) {
 
     assert_that(
@@ -197,9 +209,14 @@ test_that("src download", {
 
   expect_true(all(lgl_ply(dirs, dir.create)))
 
-  mk_dl <- mockthat::local_mock(download_check_data = NULL)
+  mk_dl <- mockthat::mock(NULL)
 
-  expect_invisible(res <- download_src(srcs, dirs))
+  expect_invisible(
+    res <- mockthat::with_mock(
+      download_check_data = mk_dl,
+      download_src(srcs, dirs)
+    )
+  )
 
   expect_null(res)
   expect_true(dir.exists(mockthat::mock_arg(mk_dl, "dest_folder")))
