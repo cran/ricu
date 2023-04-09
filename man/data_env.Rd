@@ -88,21 +88,22 @@ mimic_demo$icustays
 #> # ID options:  subject_id (patient) < hadm_id (hadm) < icustay_id (icustay)
 #> # Defaults:    `intime` (index), `last_careunit` (val)
 #> # Time vars:   `intime`, `outtime`
-#>     row_id subjec~ hadm_id icusta~ dbsour~ first_~ last_c~ first_~ last_w~
-#>      <int>   <int>   <int>   <int> <chr>   <chr>   <chr>     <int>   <int>
-#>   1  12742   10006  142345  206504 carevue MICU    MICU         52      52
-#>   2  12747   10011  105331  232110 carevue MICU    MICU         15      15
-#>   3  12749   10013  165520  264446 carevue MICU    MICU         15      15
-#>   4  12754   10017  199207  204881 carevue CCU     CCU           7       7
-#>   5  12755   10019  177759  228977 carevue MICU    MICU         15      15
+#>     row_id subject_id hadm_id icustay_id dbsource   first_careunit last_careunit
+#>      <int>      <int>   <int>      <int> <chr>      <chr>          <chr>
+#> 1    12742      10006  142345     206504 carevue    MICU           MICU
+#> 2    12747      10011  105331     232110 carevue    MICU           MICU
+#> 3    12749      10013  165520     264446 carevue    MICU           MICU
+#> 4    12754      10017  199207     204881 carevue    CCU            CCU
+#> 5    12755      10019  177759     228977 carevue    MICU           MICU
 #> ...
-#> 132  42676   44083  198330  286428 metavi~ CCU     CCU           7       7
-#> 133  42691   44154  174245  217724 metavi~ MICU    MICU         50      50
-#> 134  42709   44212  163189  239396 metavi~ MICU    MICU         50      50
-#> 135  42712   44222  192189  238186 metavi~ CCU     CCU           7       7
-#> 136  42714   44228  103379  217992 metavi~ SICU    SICU         57      57
-#> # ... with 126 more rows, and 3 more variables: intime <dttm>, outtime <dttm>,
-#> #   los <dbl>
+#> 132  42676      44083  198330     286428 metavision CCU            CCU
+#> 133  42691      44154  174245     217724 metavision MICU           MICU
+#> 134  42709      44212  163189     239396 metavision MICU           MICU
+#> 135  42712      44222  192189     238186 metavision CCU            CCU
+#> 136  42714      44228  103379     217992 metavision SICU           SICU
+#> # i 131 more rows
+#> # i 5 more variables: first_wardid <int>, last_wardid <int>, intime <dttm>,
+#> #   outtime <dttm>, los <dbl>
 }\if{html}{\out{</div>}}
 
 Table subsets can be loaded into memory for example using the
@@ -129,7 +130,7 @@ loaded as
 }\if{html}{\out{</div>}}
 
 Much care has been taken to make \code{ricu} extensible to new datasets. For
-example the publicly available ICU database \href{https://www.amsterdammedicaldatascience.nl/#amsterdamumcdb}{AmsterdamUMCdb }
+example the publicly available ICU database \href{https://amsterdammedicaldatascience.nl/amsterdamumcdb/}{AmsterdamUMCdb }
 provided by the Amsterdam University Medical Center, currently is not part
 of the core datasets of \code{ricu}, but code for integrating this dataset is
 available on \href{https://github.com/eth-mds/aumc}{github}.

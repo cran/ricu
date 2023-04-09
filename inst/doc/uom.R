@@ -184,7 +184,7 @@ knitr::kable(
   )
 )
 
-## ---- full-miss, echo = FALSE, eval = srcs_avail(demo) && !srcs_avail(srcs), results = "asis"----
+## ---- full-miss, echo = FALSE, eval = srcs_avail(demo) && (!srcs_avail(srcs) || quick_build()), results = "asis"----
 #  demo_instead_full_msg(demo, srcs, "uom.html")
 
 ## ---- demo-srcs, eval = FALSE, echo = FALSE-------------------------------
@@ -230,7 +230,7 @@ knitr::kable(
 #  
 #  head(counts)
 
-## ---- itm-load, cache = TRUE, ref.label = c("itm-funs", if (srcs_avail(srcs)) "assign-srcs" else "demo-srcs", "itm-counts")----
+## ---- itm-load, cache = TRUE, ref.label = c("itm-funs", if (srcs_avail(srcs) && !quick_build()) "assign-srcs" else "demo-srcs", "itm-counts")----
 count_meas <- function(x) {
   x[!is.na(get(data_var(x))), list(count = .N), by = c(id_vars(x))]
 }
